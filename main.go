@@ -49,26 +49,46 @@ type window struct {
 	ResetsAt       int64   `json:"resets_at"`
 }
 
-// Palette (256-color).
-const (
-	fgText   = 250
-	fgBlack  = 16
-	fgWhite  = 231
-	bgDir    = 237
-	bgGit    = 239
-	bgModel  = 24
-	bgCtx    = 238
-	bgWeek   = 60
-	bgYellow = 136
-	bgRed    = 124
+// Palette (24-bit truecolor), theme: Cyber-Monokai.
+type rgb struct{ r, g, b uint8 }
+
+var (
+	bgOdd  = rgb{0x1E, 0x1F, 0x1C}
+	bgEven = rgb{0x26, 0x27, 0x23}
+
+	idDir   = rgb{0x75, 0x71, 0x5E}
+	txtDir  = rgb{0xC8, 0xC8, 0xC2}
+	idGit   = rgb{0xF9, 0x26, 0x72}
+	idModel = rgb{0xAE, 0x81, 0xFF}
+	idCtx   = rgb{0xA6, 0xE2, 0x2E}
+	idLimit = rgb{0x66, 0xD9, 0xEF}
+
+	bgWarm  = rgb{0x3A, 0x35, 0x20}
+	fgWarm  = rgb{0xE6, 0xDB, 0x74}
+	sepWarm = rgb{0x2A, 0x26, 0x18}
+	bgCrit  = rgb{0xF9, 0x26, 0x72}
+	fgCrit  = rgb{0xFF, 0xFF, 0xFF}
+	sepCrit = rgb{0xC7, 0x1F, 0x5B}
 )
 
-const sep = ""
+const (
+	sep  = "\ue0b0"
+	edge = "\u258e"
+)
+
+type state int
+
+const (
+	stateNormal state = iota
+	stateWarming
+	stateCritical
+)
 
 type segment struct {
-	text string
-	bg   int
-	fg   int
+	text  string
+	id    rgb // identity colour: the edge glyph
+	fg    rgb // text colour
+	state state
 }
 
 func main() {
@@ -121,7 +141,7 @@ func build(p *payload) []segment {
 		dir = p.CWD
 	}
 	if dir != "" {
-		segs = append(segs, segment{dirLabel(dir), bgDir, fgText})
+		segs = append(segs, segment{dirLabel(dir), idDir, txtDir, stateNormal})
 	}
 
 	if dir != "" {
@@ -129,7 +149,7 @@ func build(p *payload) []segment {
 			if gitDirty(dir) {
 				b += "*"
 			}
-			segs = append(segs, segment{b, bgGit, fgText})
+			segs = append(segs, segment{b, idGit, idGit, stateNormal})
 		}
 	}
 
@@ -138,7 +158,7 @@ func build(p *payload) []segment {
 		if e := effortAbbrev(p.Effort.Level); e != "" {
 			name += "·" + e
 		}
-		segs = append(segs, segment{name, bgModel, fgText})
+		segs = append(segs, segment{name, idModel, idModel, stateNormal})
 	}
 
 	if s, ok := contextSegment(p); ok {
@@ -245,8 +265,8 @@ func contextSegment(p *payload) (segment, bool) {
 	}
 	pct := float64(used) / float64(target) * 100
 	text := fmt.Sprintf("%dk/%dk %d%%", roundK(used), roundK(target), int(math.Round(pct)))
-	bg, fg := threshold(pct, bgCtx)
-	return segment{text, bg, fg}, true
+	fg, st := threshold(pct, idCtx)
+	return segment{text, idCtx, fg, st}, true
 }
 
 func roundK(v int) int {
@@ -298,29 +318,70 @@ func weeklySegment(p *payload) (segment, bool) {
 			key = rl.FiveHour.UsedPercentage
 		}
 	}
-	bg, fg := threshold(key, bgWeek)
-	return segment{strings.Join(parts, " "), bg, fg}, true
+	fg, st := threshold(key, idLimit)
+	return segment{strings.Join(parts, " "), idLimit, fg, st}, true
 }
 
-func threshold(pct float64, normalBG int) (bg, fg int) {
+func threshold(pct float64, normal rgb) (fg rgb, st state) {
 	switch {
 	case pct >= 85:
-		return bgRed, fgWhite
+		return fgCrit, stateCritical
 	case pct >= 60:
-		return bgYellow, fgBlack
+		return fgWarm, stateWarming
 	default:
-		return normalBG, fgText
+		return normal, stateNormal
 	}
+}
+
+func fg(c rgb) string { return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", c.r, c.g, c.b) }
+func bg(c rgb) string { return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", c.r, c.g, c.b) }
+
+// segBG resolves a segment's background: threshold states override the
+// alternating charcoals, which alternate by render position among present
+// segments.
+func segBG(s segment, i int) rgb {
+	switch s.state {
+	case stateCritical:
+		return bgCrit
+	case stateWarming:
+		return bgWarm
+	}
+	if i%2 == 0 {
+		return bgOdd
+	}
+	return bgEven
 }
 
 func draw(segs []segment) string {
 	var b strings.Builder
+	bgs := make([]rgb, len(segs))
 	for i, s := range segs {
-		fmt.Fprintf(&b, "\x1b[48;5;%dm\x1b[38;5;%dm %s ", s.bg, s.fg, s.text)
-		if i+1 < len(segs) {
-			fmt.Fprintf(&b, "\x1b[48;5;%dm\x1b[38;5;%dm%s", segs[i+1].bg, s.bg, sep)
+		bgs[i] = segBG(s, i)
+	}
+	for i, s := range segs {
+		b.WriteString(bg(bgs[i]))
+		if s.state == stateCritical {
+			b.WriteString(fg(s.fg) + "\x1b[1m " + s.text + " \x1b[22m")
 		} else {
-			fmt.Fprintf(&b, "\x1b[0m\x1b[38;5;%dm%s\x1b[0m", s.bg, sep)
+			ec := s.id
+			if s.state == stateWarming {
+				ec = fgWarm
+			}
+			b.WriteString(fg(ec) + edge + " " + fg(s.fg) + s.text + " ")
+		}
+		if i+1 < len(segs) {
+			chev := bgs[i]
+			if chev == bgs[i+1] {
+				switch s.state {
+				case stateCritical:
+					chev = sepCrit
+				case stateWarming:
+					chev = sepWarm
+				}
+			}
+			b.WriteString(bg(bgs[i+1]) + fg(chev) + sep)
+		} else {
+			b.WriteString("\x1b[0m" + fg(bgs[i]) + sep + "\x1b[0m")
 		}
 	}
 	return b.String()
