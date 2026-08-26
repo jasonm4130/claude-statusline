@@ -34,7 +34,7 @@ The context segment measures usage against the auto-compact window:
 Segments alternate between charcoal backgrounds `#171815` and `#2E2F29` by render
 position among the segments actually present, so an omitted segment never leaves
 two same-coloured neighbours. Each segment's identity lives in its
-identity colour, and segments are joined by powerline diagonals (U+E0BC) coloured from the
+text colour, and segments are joined by powerline diagonals (U+E0BC) coloured from the
 previous background onto the next.
 
 | Segment | Identity | Text |
