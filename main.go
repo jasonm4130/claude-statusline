@@ -53,8 +53,8 @@ type window struct {
 type rgb struct{ r, g, b uint8 }
 
 var (
-	bgOdd  = rgb{0x1E, 0x1F, 0x1C}
-	bgEven = rgb{0x26, 0x27, 0x23}
+	bgOdd  = rgb{0x17, 0x18, 0x15}
+	bgEven = rgb{0x2E, 0x2F, 0x29}
 
 	idDir   = rgb{0x75, 0x71, 0x5E}
 	txtDir  = rgb{0xC8, 0xC8, 0xC2}
@@ -71,10 +71,7 @@ var (
 	sepCrit = rgb{0xC7, 0x1F, 0x5B}
 )
 
-const (
-	sep  = "\ue0bc"
-	edge = "\u258e"
-)
+const sep = "\ue0bc"
 
 type state int
 
@@ -86,7 +83,7 @@ const (
 
 type segment struct {
 	text  string
-	id    rgb // identity colour: the edge glyph
+	id    rgb // identity colour (kept for future accents; text fg carries identity)
 	fg    rgb // text colour
 	state state
 }
@@ -363,11 +360,7 @@ func draw(segs []segment) string {
 		if s.state == stateCritical {
 			b.WriteString(fg(s.fg) + "\x1b[1m " + s.text + " \x1b[22m")
 		} else {
-			ec := s.id
-			if s.state == stateWarming {
-				ec = fgWarm
-			}
-			b.WriteString(fg(ec) + edge + " " + fg(s.fg) + s.text + " ")
+			b.WriteString(" " + fg(s.fg) + s.text + " ")
 		}
 		if i+1 < len(segs) {
 			chev := bgs[i]
