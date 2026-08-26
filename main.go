@@ -72,7 +72,7 @@ var (
 )
 
 const (
-	sep  = "\ue0b0"
+	sep  = "\ue0bc"
 	edge = "\u258e"
 )
 

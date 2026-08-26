@@ -34,7 +34,7 @@ The context segment measures usage against the auto-compact window:
 Segments alternate between charcoal backgrounds `#1E1F1C` and `#262723` by render
 position among the segments actually present, so an omitted segment never leaves
 two same-coloured neighbours. Each segment opens with a `▎` edge glyph in its
-identity colour, and segments are joined by powerline chevrons coloured from the
+identity colour, and segments are joined by powerline diagonals (U+E0BC) coloured from the
 previous background onto the next.
 
 | Segment | Identity | Text |
@@ -49,7 +49,7 @@ Context and rate-limit segments each key on their own percentage. At 60–84% th
 segment goes warming: background `#3A3520`, edge and text `#E6DB74`. At 85% and
 above it goes critical: background `#F92672` flooded (no edge glyph) with bold
 `#FFFFFF` text. Two adjacent segments in the same state share a background, so
-the chevron between them darkens (`#2A2618` warming, `#C71F5B` critical) to keep
+the separator between them darkens (`#2A2618` warming, `#C71F5B` critical) to keep
 its shape visible.
 
 Git branch comes from reading `.git/HEAD` directly (worktree redirects included);
