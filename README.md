@@ -19,7 +19,7 @@ In `~/.claude/settings.json`:
 
 ## Segments
 
-`dir  branch*  model·effort  132k/400k 33%  7d 34%→Sat 5h 12%`
+`dir  branch*  model·effort  132k/400k 33%  cache→22:56  7d 34%→Sat 5h 12%`
 
 Each segment is omitted when its data is absent. The directory falls back to
 `$PWD`'s basename if stdin cannot be parsed, so the status row never blanks.
@@ -27,6 +27,25 @@ Each segment is omitted when its data is absent. The directory falls back to
 The context segment measures usage against the auto-compact window:
 `CLAUDE_CODE_AUTO_COMPACT_WINDOW` if set, else `autoCompactWindow` from
 `~/.claude/settings.json`, else the model's context window size.
+
+### Prompt-cache expiry
+
+The cache segment shows an absolute clock time, not a countdown, because Claude
+Code runs this command on state change and never on a timer — measured idle, it
+goes 60+ seconds between invocations. A countdown or a warm/expired badge would
+freeze mid-session and quietly become a lie, exactly when a quiet session is when
+you want to know. `cache→22:56` is still true at 23:30: the arithmetic happened
+once and does not decay. The one claim safe to render is the negative one, so
+once the clock has passed the segment reads `cache cold` and stays honest —
+expiry only moves forward when a new request lands, and a new request re-renders.
+
+Both inputs come from the `transcript_path` the payload already supplies. The
+timestamp is the newest request's, since a cache read refreshes the entry's TTL;
+the tier is the newest request that actually wrote a cache entry, read from
+`message.usage.cache_creation` (`ephemeral_1h_input_tokens` vs
+`ephemeral_5m_input_tokens`) — so the TTL is measured, never assumed. Only the
+last 512 KB of the transcript is read, from the end, with the partial first line
+dropped; the cost is not measurable against the git-status subprocess.
 
 ## Palette
 
@@ -43,9 +62,10 @@ previous background onto the next.
 | git | `#F92672` | identity |
 | model·effort | `#AE81FF` | identity |
 | context | `#A6E22E` | identity |
+| cache | `#FD971F` | identity |
 | limits | `#66D9EF` | identity |
 
-Context and rate-limit segments each key on their own percentage. At 60–84% the
+A cold cache borrows the warming style. Context and rate-limit segments each key on their own percentage. At 60–84% the
 segment goes warming: background `#3A3520`, text `#E6DB74`. At 85% and
 above it goes critical: background `#F92672` flooded with bold
 `#FFFFFF` text. Two adjacent segments in the same state share a background, so

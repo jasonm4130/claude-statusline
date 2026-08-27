@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -42,6 +43,7 @@ type payload struct {
 		FiveHour *window `json:"five_hour"`
 		SevenDay *window `json:"seven_day"`
 	} `json:"rate_limits"`
+	TranscriptPath string `json:"transcript_path"`
 }
 
 type window struct {
@@ -62,6 +64,7 @@ var (
 	idModel = rgb{0xAE, 0x81, 0xFF}
 	idCtx   = rgb{0xA6, 0xE2, 0x2E}
 	idLimit = rgb{0x66, 0xD9, 0xEF}
+	idCache = rgb{0xFD, 0x97, 0x1F}
 
 	bgWarm  = rgb{0x3A, 0x35, 0x20}
 	fgWarm  = rgb{0xE6, 0xDB, 0x74}
@@ -159,6 +162,9 @@ func build(p *payload) []segment {
 	}
 
 	if s, ok := contextSegment(p); ok {
+		segs = append(segs, s)
+	}
+	if s, ok := cacheSegment(p, time.Now()); ok {
 		segs = append(segs, s)
 	}
 	if s, ok := weeklySegment(p); ok {
@@ -292,6 +298,125 @@ func autoCompactTarget() int {
 		return 0
 	}
 	return int(s.AutoCompactWindow)
+}
+
+// Prompt-cache expiry.
+//
+// Claude Code runs the statusLine command on state change, never on a timer:
+// measured idle, it goes 60+ seconds between invocations. So anything rendered
+// here must stay TRUE while frozen, which rules out a countdown ("4:32 left")
+// and rules out a warm/expired badge — both silently become lies the moment the
+// session goes quiet, and quiet is exactly when you want to know.
+//
+// An absolute clock time survives the freeze: "cache→22:56" is still true at
+// 23:30, because the arithmetic happened once and does not decay. The one claim
+// that is safe to make is the negative one — expiry only moves forward when a
+// new request lands, and a new request re-renders, so "cold" stays true once
+// shown.
+const transcriptTailBytes = 512 * 1024
+
+type usageEntry struct {
+	at  time.Time
+	ttl time.Duration
+}
+
+// readTail returns up to max bytes from the end of path, dropping the partial
+// first line so every line handed back is whole.
+func readTail(path string, max int64) ([]byte, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, false
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, false
+	}
+	start := int64(0)
+	if fi.Size() > max {
+		start = fi.Size() - max
+	}
+	buf := make([]byte, fi.Size()-start)
+	if _, err := f.ReadAt(buf, start); err != nil && err != io.EOF {
+		return nil, false
+	}
+	if start > 0 {
+		if i := bytes.IndexByte(buf, '\n'); i >= 0 {
+			buf = buf[i+1:]
+		}
+	}
+	return buf, true
+}
+
+// parseLastUsage scans transcript lines newest-first for the cache clock: the
+// timestamp comes from the most recent request (a cache read refreshes the
+// entry's TTL), while the tier comes from the most recent request that actually
+// wrote a cache entry — a pure-read request reports neither ephemeral field.
+func parseLastUsage(tail []byte) (usageEntry, bool) {
+	lines := bytes.Split(tail, []byte("\n"))
+	var at time.Time
+	var ttl time.Duration
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := bytes.TrimSpace(lines[i])
+		if len(line) == 0 || !bytes.Contains(line, []byte(`"usage"`)) {
+			continue
+		}
+		var rec struct {
+			Timestamp string `json:"timestamp"`
+			Message   struct {
+				Usage *struct {
+					CacheCreation *struct {
+						Ephemeral1h int `json:"ephemeral_1h_input_tokens"`
+						Ephemeral5m int `json:"ephemeral_5m_input_tokens"`
+					} `json:"cache_creation"`
+				} `json:"usage"`
+			} `json:"message"`
+		}
+		if err := json.Unmarshal(line, &rec); err != nil || rec.Message.Usage == nil {
+			continue
+		}
+		if at.IsZero() {
+			t, err := time.Parse(time.RFC3339, rec.Timestamp)
+			if err != nil {
+				continue
+			}
+			at = t
+		}
+		if cc := rec.Message.Usage.CacheCreation; cc != nil {
+			switch {
+			case cc.Ephemeral1h > 0:
+				ttl = time.Hour
+			case cc.Ephemeral5m > 0:
+				ttl = 5 * time.Minute
+			}
+		}
+		if ttl > 0 {
+			break
+		}
+	}
+	if at.IsZero() || ttl == 0 {
+		return usageEntry{}, false
+	}
+	return usageEntry{at, ttl}, true
+}
+
+func cacheSegment(p *payload, now time.Time) (segment, bool) {
+	if p.TranscriptPath == "" {
+		return segment{}, false
+	}
+	tail, ok := readTail(p.TranscriptPath, transcriptTailBytes)
+	if !ok {
+		return segment{}, false
+	}
+	e, ok := parseLastUsage(tail)
+	if !ok {
+		return segment{}, false
+	}
+	expiry := e.at.Add(e.ttl)
+	if !now.Before(expiry) {
+		return segment{"cache cold", idCache, fgWarm, stateWarming}, true
+	}
+	return segment{"cache→" + expiry.Local().Format("15:04"), idCache, idCache, stateNormal}, true
 }
 
 func weeklySegment(p *payload) (segment, bool) {
