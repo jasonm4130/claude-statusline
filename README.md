@@ -17,7 +17,7 @@ Download a binary from [the latest release](https://github.com/jasonm4130/claude
 
 ```sh
 tar -xzf claude-statusline_*_darwin_arm64.tar.gz
-install -m 755 claude-statusline ~/.local/bin/
+install -m 755 claude-statusline_*/claude-statusline ~/.local/bin/
 ```
 
 Or build from source, which needs nothing but a Go toolchain:
@@ -44,7 +44,7 @@ Each segment disappears when its data is absent, and the alternating backgrounds
 
 | Segment | Example | Source |
 |---|---|---|
-| directory | `claude-statusline` | payload `cwd`, or `$PWD` on a parse failure |
+| directory | `claude-statusline` | payload `workspace.current_dir`, then `cwd`, then `$PWD` on a parse failure |
 | git | `main*` | `.git/HEAD` read directly; `*` from `git status --porcelain` |
 | model | `opus·high` | payload `model` and `effort` |
 | context | `132k/400k 33%` | payload `context_window` against the auto-compact window |
@@ -84,12 +84,14 @@ Theme: Cyber-Monokai, 24-bit truecolor. Backgrounds alternate between `#171815` 
 
 | Segment | Colour |
 |---|---|
-| directory | `#75715E` on `#C8C8C2` text |
+| directory | `#C8C8C2` |
 | git | `#F92672` |
 | model | `#AE81FF` |
 | context | `#A6E22E` |
 | cache | `#FD971F` |
 | limits | `#66D9EF` |
+
+The directory segment is the exception to identity-as-text-colour: its text is `#C8C8C2`, while `#75715E` serves as its muted accent.
 
 Context and rate-limit segments each key on their own percentage. From 60% to 84% a segment goes warming — background `#3A3520`, text `#E6DB74`. At 85% and above it goes critical: background `#F92672` flooded with bold `#FFFFFF`. A cold cache borrows the warming style. Where two adjacent segments share a state, and therefore a background, the separator between them darkens to `#2A2618` or `#C71F5B` to keep its shape visible.
 

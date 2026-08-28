@@ -28,6 +28,10 @@ builds:
 archives:
   - id: default
     formats: [tar.gz]
+    # Without this the archive extracts three files flat, and the install
+    # snippet below would overwrite a README.md or LICENSE already sitting in
+    # whatever directory the user ran tar from.
+    wrap_in_directory: true
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     files:
@@ -55,7 +59,7 @@ release:
 
     ```sh
     tar -xzf claude-statusline_*_darwin_arm64.tar.gz
-    install -m 755 claude-statusline ~/.local/bin/
+    install -m 755 claude-statusline_*/claude-statusline ~/.local/bin/
     ```
 
     Then point `~/.claude/settings.json` at it:

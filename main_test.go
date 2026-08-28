@@ -311,9 +311,15 @@ func TestLimitSegments(t *testing.T) {
 	})
 
 	t.Run("high usage is critical even when on pace", func(t *testing.T) {
-		segs := limitSegments(mk(&window{90, 1787923200}, nil), now)
+		// 25 minutes from reset: 92% elapsed against 90% used projects to 98%,
+		// so this window really is on pace and the criticality comes from the
+		// usage alone.
+		segs := limitSegments(mk(&window{90, 1787914097}, nil), now)
 		if segs[0].state != stateCritical {
 			t.Errorf("state = %v, want critical", segs[0].state)
+		}
+		if strings.Contains(segs[0].text, overPace) {
+			t.Fatalf("text = %q is over pace, so this case is not testing what it says", segs[0].text)
 		}
 	})
 
