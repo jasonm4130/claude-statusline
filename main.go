@@ -91,9 +91,23 @@ type segment struct {
 	state state
 }
 
+// Set by the linker at release time; a local build reports "dev".
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--version", "-v", "version":
+			fmt.Printf("claude-statusline %s (%s, built %s)\n", version, commit, date)
+			os.Exit(0)
+		}
+	}
 	out := render()
-	fmt.Fprintln(os.Stdout, out)
+	_, _ = fmt.Fprintln(os.Stdout, out)
 	os.Exit(0)
 }
 
@@ -167,9 +181,7 @@ func build(p *payload) []segment {
 	if s, ok := cacheSegment(p, time.Now()); ok {
 		segs = append(segs, s)
 	}
-	if s, ok := limitsSegment(p, time.Now()); ok {
-		segs = append(segs, s)
-	}
+	segs = append(segs, limitSegments(p, time.Now())...)
 	return segs
 }
 
@@ -320,21 +332,21 @@ type usageEntry struct {
 	ttl time.Duration
 }
 
-// readTail returns up to max bytes from the end of path, dropping the partial
+// readTail returns up to limit bytes from the end of path, dropping the partial
 // first line so every line handed back is whole.
-func readTail(path string, max int64) ([]byte, bool) {
+func readTail(path string, limit int64) ([]byte, bool) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	fi, err := f.Stat()
 	if err != nil {
 		return nil, false
 	}
 	start := int64(0)
-	if fi.Size() > max {
-		start = fi.Size() - max
+	if fi.Size() > limit {
+		start = fi.Size() - limit
 	}
 	buf := make([]byte, fi.Size()-start)
 	if _, err := f.ReadAt(buf, start); err != nil && err != io.EOF {
@@ -450,44 +462,52 @@ func projected(w *window, length time.Duration, now time.Time) (float64, bool) {
 	return math.Min(w.UsedPercentage/e, 999), true
 }
 
-func limitsSegment(p *payload, now time.Time) (segment, bool) {
+// Each window renders as its own segment so it can carry its own colour: a hot
+// five-hour window should not repaint a healthy weekly one, and vice versa.
+func limitSegments(p *payload, now time.Time) []segment {
 	rl := p.RateLimits
-	if rl == nil || (rl.SevenDay == nil && rl.FiveHour == nil) {
-		return segment{}, false
+	if rl == nil {
+		return nil
 	}
-	var parts []string
-	st := stateNormal
-	worse := func(s state) {
-		if s > st {
-			st = s
-		}
-	}
-	add := func(label string, w *window, length time.Duration, suffix string) {
-		if w == nil {
-			return
-		}
-		s := fmt.Sprintf("%s %d%%", label, int(math.Round(w.UsedPercentage)))
-		if proj, ok := projected(w, length, now); ok {
-			s += fmt.Sprintf("\u2192%d%%", int(math.Round(proj)))
-			if proj >= 100 {
-				worse(stateWarming)
-			}
-		}
-		if suffix != "" {
-			s += " " + suffix
-		}
-		worse(stateOf(w.UsedPercentage))
-		parts = append(parts, s)
-	}
-
 	day := ""
 	if rl.SevenDay != nil && rl.SevenDay.ResetsAt > 0 {
 		day = time.Unix(rl.SevenDay.ResetsAt, 0).Local().Format("Mon")
 	}
-	add("7d", rl.SevenDay, sevenDayLen, day)
-	add("5h", rl.FiveHour, fiveHourLen, "")
+	var segs []segment
+	if s, ok := limitWindow("7d", rl.SevenDay, sevenDayLen, day, now); ok {
+		segs = append(segs, s)
+	}
+	if s, ok := limitWindow("5h", rl.FiveHour, fiveHourLen, "", now); ok {
+		segs = append(segs, s)
+	}
+	return segs
+}
 
-	return segment{strings.Join(parts, " "), idLimit, stateFG(st, idLimit), st}, true
+// overPace marks a window whose projection has passed the cap. Colour alone
+// cannot carry that: the warming amber also means "used a lot", the two
+// conditions are different, and a glyph survives a colourblind reader and a
+// terminal with a mangled palette.
+const overPace = "\u25b2 "
+
+func limitWindow(label string, w *window, length time.Duration, suffix string, now time.Time) (segment, bool) {
+	if w == nil {
+		return segment{}, false
+	}
+	st := stateOf(w.UsedPercentage)
+	text := fmt.Sprintf("%s %d%%", label, int(math.Round(w.UsedPercentage)))
+	if proj, ok := projected(w, length, now); ok {
+		text += fmt.Sprintf("\u2192%d%%", int(math.Round(proj)))
+		if proj >= 100 {
+			text = overPace + text
+			if st < stateWarming {
+				st = stateWarming
+			}
+		}
+	}
+	if suffix != "" {
+		text += " " + suffix
+	}
+	return segment{text, idLimit, stateFG(st, idLimit), st}, true
 }
 
 func stateOf(pct float64) state {
