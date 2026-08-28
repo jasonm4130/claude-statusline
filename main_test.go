@@ -249,7 +249,18 @@ func TestProjected(t *testing.T) {
 	}
 }
 
+// pinZone fixes the local zone for the duration of a test. Two segments render
+// in local time -- the cache clock and the weekly reset day -- so without this a
+// test asserting on either passes in Brisbane and fails on a UTC CI runner.
+func pinZone(t *testing.T) {
+	t.Helper()
+	prev := time.Local
+	time.Local = time.FixedZone("AEST", 10*60*60)
+	t.Cleanup(func() { time.Local = prev })
+}
+
 func TestLimitSegments(t *testing.T) {
+	pinZone(t)
 	now := time.Unix(1787912597, 0)
 	mk := func(five, seven *window) *payload {
 		p := &payload{}

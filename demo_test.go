@@ -90,11 +90,8 @@ func demoRows(t *testing.T, now time.Time) []demoRow {
 }
 
 func TestDemoSVG(t *testing.T) {
-	// Reset times and the cache clock render in local time. Pin the zone so the
-	// image is identical on a laptop and in CI.
-	prev := time.Local
-	time.Local = time.FixedZone("AEST", 10*60*60)
-	t.Cleanup(func() { time.Local = prev })
+	// The image must be identical on a laptop and in CI.
+	pinZone(t)
 
 	now := time.Unix(1787912597, 0)
 	rows := demoRows(t, now)
