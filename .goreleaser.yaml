@@ -1,0 +1,65 @@
+# https://goreleaser.com
+version: 2
+
+project_name: claude-statusline
+
+before:
+  hooks:
+    - go mod tidy
+    - go vet ./...
+    - go test ./...
+
+builds:
+  - id: claude-statusline
+    binary: claude-statusline
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    # Reproducible: no build path in the binary, timestamp pinned to the commit.
+    flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .FullCommit }}
+      - -X main.date={{ .CommitDate }}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+sboms:
+  - artifacts: archive
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^ci:"
+      - "^chore:"
+      - "^docs:"
+      - "typo"
+
+release:
+  footer: |
+    ## Install
+
+    ```sh
+    tar -xzf claude-statusline_*_darwin_arm64.tar.gz
+    install -m 755 claude-statusline ~/.local/bin/
+    ```
+
+    Then point `~/.claude/settings.json` at it:
+
+    ```json
+    "statusLine": { "type": "command", "command": "~/.local/bin/claude-statusline" }
+    ```

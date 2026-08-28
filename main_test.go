@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -248,7 +249,18 @@ func TestProjected(t *testing.T) {
 	}
 }
 
-func TestLimitsSegment(t *testing.T) {
+// pinZone fixes the local zone for the duration of a test. Two segments render
+// in local time -- the cache clock and the weekly reset day -- so without this a
+// test asserting on either passes in Brisbane and fails on a UTC CI runner.
+func pinZone(t *testing.T) {
+	t.Helper()
+	prev := time.Local
+	time.Local = time.FixedZone("AEST", 10*60*60)
+	t.Cleanup(func() { time.Local = prev })
+}
+
+func TestLimitSegments(t *testing.T) {
+	pinZone(t)
 	now := time.Unix(1787912597, 0)
 	mk := func(five, seven *window) *payload {
 		p := &payload{}
@@ -258,45 +270,63 @@ func TestLimitsSegment(t *testing.T) {
 		}{five, seven}
 		return p
 	}
+	texts := func(segs []segment) []string {
+		out := make([]string, len(segs))
+		for i, s := range segs {
+			out[i] = s.text
+		}
+		return out
+	}
 
-	t.Run("both windows with pace", func(t *testing.T) {
-		s, ok := limitsSegment(mk(&window{13, 1787923200}, &window{23, 1788033600}), now)
-		if !ok {
-			t.Fatal("no segment")
+	t.Run("one segment per window, weekly first", func(t *testing.T) {
+		segs := limitSegments(mk(&window{13, 1787923200}, &window{23, 1788033600}), now)
+		want := []string{"7d 23%→29% Sun", "5h 13%→32%"}
+		if got := texts(segs); !slices.Equal(got, want) {
+			t.Errorf("texts = %q, want %q", got, want)
 		}
-		want := "7d 23%→29% Sun 5h 13%→32%"
-		if s.text != want {
-			t.Errorf("text = %q, want %q", s.text, want)
-		}
-		if s.state != stateNormal {
-			t.Errorf("state = %v, want normal", s.state)
+		for i, s := range segs {
+			if s.state != stateNormal {
+				t.Errorf("segment %d state = %v, want normal", i, s.state)
+			}
 		}
 	})
 
-	t.Run("projection past the cap warms", func(t *testing.T) {
-		s, _ := limitsSegment(mk(&window{60, 1787923200}, nil), now)
-		if s.state != stateWarming {
-			t.Errorf("state = %v, want warming", s.state)
+	t.Run("a hot window does not repaint a healthy one", func(t *testing.T) {
+		segs := limitSegments(mk(&window{72, 1787923200}, &window{23, 1788033600}), now)
+		if len(segs) != 2 {
+			t.Fatalf("got %d segments, want 2", len(segs))
+		}
+		if segs[0].state != stateNormal {
+			t.Errorf("7d state = %v, want normal", segs[0].state)
+		}
+		if segs[1].state != stateWarming {
+			t.Errorf("5h state = %v, want warming", segs[1].state)
+		}
+		if !strings.HasPrefix(segs[1].text, overPace) {
+			t.Errorf("5h text = %q, want the over-pace glyph", segs[1].text)
+		}
+		if strings.Contains(segs[0].text, overPace) {
+			t.Errorf("7d text = %q, should not be marked over pace", segs[0].text)
 		}
 	})
 
-	t.Run("high usage stays critical regardless of pace", func(t *testing.T) {
-		s, _ := limitsSegment(mk(&window{90, 1787923200}, nil), now)
-		if s.state != stateCritical {
-			t.Errorf("state = %v, want critical", s.state)
+	t.Run("high usage is critical even when on pace", func(t *testing.T) {
+		segs := limitSegments(mk(&window{90, 1787923200}, nil), now)
+		if segs[0].state != stateCritical {
+			t.Errorf("state = %v, want critical", segs[0].state)
 		}
 	})
 
 	t.Run("no reset time falls back to bare usage", func(t *testing.T) {
-		s, _ := limitsSegment(mk(&window{13, 0}, nil), now)
-		if s.text != "5h 13%" {
-			t.Errorf("text = %q, want %q", s.text, "5h 13%")
+		segs := limitSegments(mk(&window{13, 0}, nil), now)
+		if got := texts(segs); !slices.Equal(got, []string{"5h 13%"}) {
+			t.Errorf("texts = %q", got)
 		}
 	})
 
 	t.Run("absent rate limits", func(t *testing.T) {
-		if _, ok := limitsSegment(&payload{}, now); ok {
-			t.Error("expected no segment")
+		if segs := limitSegments(&payload{}, now); len(segs) != 0 {
+			t.Errorf("got %d segments, want 0", len(segs))
 		}
 	})
 }

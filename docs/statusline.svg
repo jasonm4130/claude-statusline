@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="897" height="194" viewBox="0 0 897 194" role="img" aria-label="claude-statusline rendered in three states">
+<rect width="897" height="194" rx="8" fill="#141513"/>
+<g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14">
+<text x="16.0" y="29.0" font-size="11" fill="#75715e">on pace — both windows land well under the cap</text>
+<rect x="16.0" y="36.0" width="8.4" height="26.0" fill="#171815"/>
+<rect x="24.4" y="36.0" width="151.2" height="26.0" fill="#171815"/>
+<text x="24.4" y="54.0" fill="#c8c8c2" textLength="151.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">claude-statusline </text>
+<rect x="175.6" y="36.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<polygon points="175.6,36.0 184.0,36.0 175.6,62.0" fill="#171815"/>
+<rect x="184.0" y="36.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<rect x="192.4" y="36.0" width="50.4" height="26.0" fill="#2e2f29"/>
+<text x="192.4" y="54.0" fill="#f92672" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">main* </text>
+<rect x="242.8" y="36.0" width="8.4" height="26.0" fill="#171815"/>
+<polygon points="242.8,36.0 251.2,36.0 242.8,62.0" fill="#2e2f29"/>
+<rect x="251.2" y="36.0" width="8.4" height="26.0" fill="#171815"/>
+<rect x="259.6" y="36.0" width="84.0" height="26.0" fill="#171815"/>
+<text x="259.6" y="54.0" fill="#ae81ff" textLength="84.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">opus·high </text>
+<rect x="343.6" y="36.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<polygon points="343.6,36.0 352.0,36.0 343.6,62.0" fill="#171815"/>
+<rect x="352.0" y="36.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<rect x="360.4" y="36.0" width="117.6" height="26.0" fill="#2e2f29"/>
+<text x="360.4" y="54.0" fill="#a6e22e" textLength="117.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">132k/400k 33% </text>
+<rect x="478.0" y="36.0" width="8.4" height="26.0" fill="#171815"/>
+<polygon points="478.0,36.0 486.4,36.0 478.0,62.0" fill="#2e2f29"/>
+<rect x="486.4" y="36.0" width="8.4" height="26.0" fill="#171815"/>
+<rect x="494.8" y="36.0" width="100.8" height="26.0" fill="#171815"/>
+<text x="494.8" y="54.0" fill="#fd971f" textLength="100.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">cache→22:56 </text>
+<rect x="595.6" y="36.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<polygon points="595.6,36.0 604.0,36.0 595.6,62.0" fill="#171815"/>
+<rect x="604.0" y="36.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<rect x="612.4" y="36.0" width="126.0" height="26.0" fill="#2e2f29"/>
+<text x="612.4" y="54.0" fill="#66d9ef" textLength="126.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">7d 23%→29% Sun </text>
+<rect x="738.4" y="36.0" width="8.4" height="26.0" fill="#171815"/>
+<polygon points="738.4,36.0 746.8,36.0 738.4,62.0" fill="#2e2f29"/>
+<rect x="746.8" y="36.0" width="8.4" height="26.0" fill="#171815"/>
+<rect x="755.2" y="36.0" width="92.4" height="26.0" fill="#171815"/>
+<text x="755.2" y="54.0" fill="#66d9ef" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">5h 13%→32% </text>
+<polygon points="847.6,36.0 856.0,36.0 847.6,62.0" fill="#171815"/>
+<text x="16.0" y="87.0" font-size="11" fill="#75715e">five-hour burn projects past the cap; the weekly window is untouched</text>
+<rect x="16.0" y="94.0" width="8.4" height="26.0" fill="#171815"/>
+<rect x="24.4" y="94.0" width="151.2" height="26.0" fill="#171815"/>
+<text x="24.4" y="112.0" fill="#c8c8c2" textLength="151.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">claude-statusline </text>
+<rect x="175.6" y="94.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<polygon points="175.6,94.0 184.0,94.0 175.6,120.0" fill="#171815"/>
+<rect x="184.0" y="94.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<rect x="192.4" y="94.0" width="50.4" height="26.0" fill="#2e2f29"/>
+<text x="192.4" y="112.0" fill="#f92672" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">main* </text>
+<rect x="242.8" y="94.0" width="8.4" height="26.0" fill="#171815"/>
+<polygon points="242.8,94.0 251.2,94.0 242.8,120.0" fill="#2e2f29"/>
+<rect x="251.2" y="94.0" width="8.4" height="26.0" fill="#171815"/>
+<rect x="259.6" y="94.0" width="84.0" height="26.0" fill="#171815"/>
+<text x="259.6" y="112.0" fill="#ae81ff" textLength="84.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">opus·high </text>
+<rect x="343.6" y="94.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<polygon points="343.6,94.0 352.0,94.0 343.6,120.0" fill="#171815"/>
+<rect x="352.0" y="94.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<rect x="360.4" y="94.0" width="117.6" height="26.0" fill="#2e2f29"/>
+<text x="360.4" y="112.0" fill="#a6e22e" textLength="117.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">132k/400k 33% </text>
+<rect x="478.0" y="94.0" width="8.4" height="26.0" fill="#171815"/>
+<polygon points="478.0,94.0 486.4,94.0 478.0,120.0" fill="#2e2f29"/>
+<rect x="486.4" y="94.0" width="8.4" height="26.0" fill="#171815"/>
+<rect x="494.8" y="94.0" width="100.8" height="26.0" fill="#171815"/>
+<text x="494.8" y="112.0" fill="#fd971f" textLength="100.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">cache→22:56 </text>
+<rect x="595.6" y="94.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<polygon points="595.6,94.0 604.0,94.0 595.6,120.0" fill="#171815"/>
+<rect x="604.0" y="94.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<rect x="612.4" y="94.0" width="126.0" height="26.0" fill="#2e2f29"/>
+<text x="612.4" y="112.0" fill="#66d9ef" textLength="126.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">7d 23%→29% Sun </text>
+<rect x="738.4" y="94.0" width="8.4" height="26.0" fill="#3a3520"/>
+<polygon points="738.4,94.0 746.8,94.0 738.4,120.0" fill="#2e2f29"/>
+<rect x="746.8" y="94.0" width="8.4" height="26.0" fill="#3a3520"/>
+<rect x="755.2" y="94.0" width="117.6" height="26.0" fill="#3a3520"/>
+<text x="755.2" y="112.0" fill="#e6db74" textLength="117.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▲ 5h 72%→175% </text>
+<polygon points="872.8,94.0 881.2,94.0 872.8,120.0" fill="#3a3520"/>
+<text x="16.0" y="145.0" font-size="11" fill="#75715e">weekly window nearly spent — and still climbing</text>
+<rect x="16.0" y="152.0" width="8.4" height="26.0" fill="#171815"/>
+<rect x="24.4" y="152.0" width="151.2" height="26.0" fill="#171815"/>
+<text x="24.4" y="170.0" fill="#c8c8c2" textLength="151.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">claude-statusline </text>
+<rect x="175.6" y="152.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<polygon points="175.6,152.0 184.0,152.0 175.6,178.0" fill="#171815"/>
+<rect x="184.0" y="152.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<rect x="192.4" y="152.0" width="50.4" height="26.0" fill="#2e2f29"/>
+<text x="192.4" y="170.0" fill="#f92672" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">main* </text>
+<rect x="242.8" y="152.0" width="8.4" height="26.0" fill="#171815"/>
+<polygon points="242.8,152.0 251.2,152.0 242.8,178.0" fill="#2e2f29"/>
+<rect x="251.2" y="152.0" width="8.4" height="26.0" fill="#171815"/>
+<rect x="259.6" y="152.0" width="84.0" height="26.0" fill="#171815"/>
+<text x="259.6" y="170.0" fill="#ae81ff" textLength="84.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">opus·high </text>
+<rect x="343.6" y="152.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<polygon points="343.6,152.0 352.0,152.0 343.6,178.0" fill="#171815"/>
+<rect x="352.0" y="152.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<rect x="360.4" y="152.0" width="117.6" height="26.0" fill="#2e2f29"/>
+<text x="360.4" y="170.0" fill="#a6e22e" textLength="117.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">132k/400k 33% </text>
+<rect x="478.0" y="152.0" width="8.4" height="26.0" fill="#171815"/>
+<polygon points="478.0,152.0 486.4,152.0 478.0,178.0" fill="#2e2f29"/>
+<rect x="486.4" y="152.0" width="8.4" height="26.0" fill="#171815"/>
+<rect x="494.8" y="152.0" width="100.8" height="26.0" fill="#171815"/>
+<text x="494.8" y="170.0" fill="#fd971f" textLength="100.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">cache→22:56 </text>
+<rect x="595.6" y="152.0" width="8.4" height="26.0" fill="#f92672"/>
+<polygon points="595.6,152.0 604.0,152.0 595.6,178.0" fill="#171815"/>
+<rect x="604.0" y="152.0" width="159.6" height="26.0" fill="#f92672"/>
+<text x="604.0" y="170.0" fill="#ffffff" font-weight="600" textLength="159.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ▲ 7d 91%→114% Sun </text>
+<rect x="763.6" y="152.0" width="8.4" height="26.0" fill="#171815"/>
+<polygon points="763.6,152.0 772.0,152.0 763.6,178.0" fill="#f92672"/>
+<rect x="772.0" y="152.0" width="8.4" height="26.0" fill="#171815"/>
+<rect x="780.4" y="152.0" width="92.4" height="26.0" fill="#171815"/>
+<text x="780.4" y="170.0" fill="#66d9ef" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">5h 13%→32% </text>
+<polygon points="872.8,152.0 881.2,152.0 872.8,178.0" fill="#171815"/>
+</g>
+</svg>
