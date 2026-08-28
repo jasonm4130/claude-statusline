@@ -167,7 +167,7 @@ func build(p *payload) []segment {
 	if s, ok := cacheSegment(p, time.Now()); ok {
 		segs = append(segs, s)
 	}
-	if s, ok := weeklySegment(p); ok {
+	if s, ok := limitsSegment(p, time.Now()); ok {
 		segs = append(segs, s)
 	}
 	return segs
@@ -419,40 +419,101 @@ func cacheSegment(p *payload, now time.Time) (segment, bool) {
 	return segment{"cache→" + expiry.Local().Format("15:04"), idCache, idCache, stateNormal}, true
 }
 
-func weeklySegment(p *payload) (segment, bool) {
+// Pace.
+//
+// Each window has a known length, so resets_at fixes its start and the fraction
+// already elapsed is arithmetic. Dividing used% by that fraction projects where
+// the window lands at reset if the average burn so far continues: under 100% is
+// headroom, over 100% means the cap arrives before the reset does.
+//
+// Like the cache clock this render can sit frozen for minutes, but the drift is
+// safe here. While idle, elapsed grows and used does not, so the true projection
+// only ever falls — a stale reading overstates the burn and never invites spend
+// the window cannot cover.
+const (
+	fiveHourLen = 5 * time.Hour
+	sevenDayLen = 7 * 24 * time.Hour
+	// Under this much of a window elapsed, used/elapsed is dominated by
+	// whatever landed in the first few minutes and projects noise.
+	paceFloor = 0.05
+)
+
+func projected(w *window, length time.Duration, now time.Time) (float64, bool) {
+	if w == nil || w.ResetsAt <= 0 {
+		return 0, false
+	}
+	elapsed := length - time.Unix(w.ResetsAt, 0).Sub(now)
+	e := float64(elapsed) / float64(length)
+	if e < paceFloor || e > 1 {
+		return 0, false
+	}
+	return math.Min(w.UsedPercentage/e, 999), true
+}
+
+func limitsSegment(p *payload, now time.Time) (segment, bool) {
 	rl := p.RateLimits
 	if rl == nil || (rl.SevenDay == nil && rl.FiveHour == nil) {
 		return segment{}, false
 	}
 	var parts []string
-	key := 0.0
-	if rl.SevenDay != nil {
-		s := fmt.Sprintf("7d %d%%", int(math.Round(rl.SevenDay.UsedPercentage)))
-		if rl.SevenDay.ResetsAt > 0 {
-			s += "→" + time.Unix(rl.SevenDay.ResetsAt, 0).Local().Format("Mon")
+	st := stateNormal
+	worse := func(s state) {
+		if s > st {
+			st = s
 		}
+	}
+	add := func(label string, w *window, length time.Duration, suffix string) {
+		if w == nil {
+			return
+		}
+		s := fmt.Sprintf("%s %d%%", label, int(math.Round(w.UsedPercentage)))
+		if proj, ok := projected(w, length, now); ok {
+			s += fmt.Sprintf("\u2192%d%%", int(math.Round(proj)))
+			if proj >= 100 {
+				worse(stateWarming)
+			}
+		}
+		if suffix != "" {
+			s += " " + suffix
+		}
+		worse(stateOf(w.UsedPercentage))
 		parts = append(parts, s)
-		key = rl.SevenDay.UsedPercentage
 	}
-	if rl.FiveHour != nil {
-		parts = append(parts, fmt.Sprintf("5h %d%%", int(math.Round(rl.FiveHour.UsedPercentage))))
-		if rl.SevenDay == nil {
-			key = rl.FiveHour.UsedPercentage
-		}
+
+	day := ""
+	if rl.SevenDay != nil && rl.SevenDay.ResetsAt > 0 {
+		day = time.Unix(rl.SevenDay.ResetsAt, 0).Local().Format("Mon")
 	}
-	fg, st := threshold(key, idLimit)
-	return segment{strings.Join(parts, " "), idLimit, fg, st}, true
+	add("7d", rl.SevenDay, sevenDayLen, day)
+	add("5h", rl.FiveHour, fiveHourLen, "")
+
+	return segment{strings.Join(parts, " "), idLimit, stateFG(st, idLimit), st}, true
+}
+
+func stateOf(pct float64) state {
+	switch {
+	case pct >= 85:
+		return stateCritical
+	case pct >= 60:
+		return stateWarming
+	default:
+		return stateNormal
+	}
+}
+
+func stateFG(st state, normal rgb) rgb {
+	switch st {
+	case stateCritical:
+		return fgCrit
+	case stateWarming:
+		return fgWarm
+	}
+	return normal
 }
 
 func threshold(pct float64, normal rgb) (fg rgb, st state) {
-	switch {
-	case pct >= 85:
-		return fgCrit, stateCritical
-	case pct >= 60:
-		return fgWarm, stateWarming
-	default:
-		return normal, stateNormal
-	}
+	st = stateOf(pct)
+	return stateFG(st, normal), st
 }
 
 func fg(c rgb) string { return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", c.r, c.g, c.b) }

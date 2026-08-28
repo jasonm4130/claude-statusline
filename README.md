@@ -19,7 +19,7 @@ In `~/.claude/settings.json`:
 
 ## Segments
 
-`dir  branch*  model·effort  132k/400k 33%  cache→22:56  7d 34%→Sat 5h 12%`
+`dir  branch*  model·effort  132k/400k 33%  cache→22:56  7d 23%→29% Sun 5h 13%→31%`
 
 Each segment is omitted when its data is absent. The directory falls back to
 `$PWD`'s basename if stdin cannot be parsed, so the status row never blanks.
@@ -27,6 +27,26 @@ Each segment is omitted when its data is absent. The directory falls back to
 The context segment measures usage against the auto-compact window:
 `CLAUDE_CODE_AUTO_COMPACT_WINDOW` if set, else `autoCompactWindow` from
 `~/.claude/settings.json`, else the model's context window size.
+
+### Rate-limit pace
+
+The limits segment answers how hard you can spend, not just how much you have
+spent. Each window has a known length, so `resets_at` fixes its start and the
+fraction already elapsed is arithmetic; used% over that fraction projects where
+the window lands at reset if the average burn so far continues. `5h 13%→31%`
+means the current burn ends the five-hour window at 31% — plenty of headroom.
+Over 100% means the cap arrives before the reset does, and the segment goes
+warming.
+
+Like the cache clock this render sits frozen for minutes at a time, but the
+drift is safe here rather than dangerous. While the session is idle, elapsed
+grows and used does not, so the true projection only ever falls: a stale reading
+overstates the burn, and never invites spend the window cannot cover.
+
+Projection is suppressed below 5% elapsed, where used/elapsed is dominated by
+whatever landed in the first few minutes, and when `resets_at` is missing or
+already past — in those cases the segment falls back to bare usage. The value is
+clamped at 999%.
 
 ### Prompt-cache expiry
 
@@ -65,7 +85,9 @@ previous background onto the next.
 | cache | `#FD971F` | identity |
 | limits | `#66D9EF` | identity |
 
-A cold cache borrows the warming style. Context and rate-limit segments each key on their own percentage. At 60–84% the
+A cold cache borrows the warming style. The context segment keys on its own
+percentage; the limits segment takes the worst state across both windows, and
+goes warming on its own if either projection reaches 100%. At 60–84% the
 segment goes warming: background `#3A3520`, text `#E6DB74`. At 85% and
 above it goes critical: background `#F92672` flooded with bold
 `#FFFFFF` text. Two adjacent segments in the same state share a background, so
