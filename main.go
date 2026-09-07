@@ -167,18 +167,20 @@ func build(p *payload) []segment {
 		}
 	}
 
-	if p.Model.DisplayName != "" {
-		name := strings.ToLower(strings.Fields(p.Model.DisplayName)[0])
-		if e := effortAbbrev(p.Effort.Level); e != "" {
-			name += "·" + e
-		}
-		segs = append(segs, segment{name, idModel, idModel, stateNormal})
+	var tail []byte
+	if p.TranscriptPath != "" {
+		tail, _ = readTail(p.TranscriptPath, transcriptTailBytes)
+	}
+
+	last, haveLast := lastTurn(p.TranscriptPath, tail)
+	if s, ok := modelSegment(p, last, haveLast); ok {
+		segs = append(segs, s)
 	}
 
 	if s, ok := contextSegment(p); ok {
 		segs = append(segs, s)
 	}
-	if s, ok := cacheSegment(p, time.Now()); ok {
+	if s, ok := cacheSegment(tail, time.Now()); ok {
 		segs = append(segs, s)
 	}
 	segs = append(segs, limitSegments(p, time.Now())...)
@@ -199,6 +201,170 @@ func effortAbbrev(level string) string {
 		return "max"
 	}
 	return ""
+}
+
+// Who spoke last.
+//
+// The payload names the session model, so it does not move while a subagent
+// works. The transcript does: a subagent writes its own file under
+// <transcript>/subagents, and every assistant record there carries the agent
+// type, the model and the effort. Comparing the newest assistant record in the
+// main transcript against the newest one in the freshest subagent file answers
+// which agent produced the last turn.
+//
+// That is a claim about the past, so it survives a frozen render the way the
+// cache clock does. A live "a subagent is running now" badge would not: the
+// statusline is called on state change, never on a timer, so the badge would
+// outlive the agent. When the subagent finishes the main agent speaks again,
+// which re-renders, and the segment flips back on its own.
+//
+// Parallel agents are one stated gap. The newest record wins, so a fan-out of
+// four names whichever of them wrote last, not all four.
+type turn struct {
+	at      time.Time
+	agent   string // attributionAgent; empty for the main agent
+	model   string // model ID, for example "claude-sonnet-5"
+	effort  string
+	advisor string // advisorModel: the model behind the advisor tool
+}
+
+// parseLastTurn scans transcript lines newest-first for the last assistant
+// record and reports who wrote it.
+func parseLastTurn(tail []byte) (turn, bool) {
+	lines := bytes.Split(tail, []byte("\n"))
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := bytes.TrimSpace(lines[i])
+		if len(line) == 0 || !bytes.Contains(line, []byte(`"assistant"`)) {
+			continue
+		}
+		var rec struct {
+			Type             string `json:"type"`
+			Timestamp        string `json:"timestamp"`
+			Effort           string `json:"effort"`
+			AdvisorModel     string `json:"advisorModel"`
+			AttributionAgent string `json:"attributionAgent"`
+			Message          struct {
+				Model string `json:"model"`
+			} `json:"message"`
+		}
+		if err := json.Unmarshal(line, &rec); err != nil {
+			continue
+		}
+		if rec.Type != "assistant" || rec.Message.Model == "" {
+			continue
+		}
+		at, err := time.Parse(time.RFC3339, rec.Timestamp)
+		if err != nil {
+			continue
+		}
+		return turn{at, rec.AttributionAgent, rec.Message.Model, rec.Effort, rec.AdvisorModel}, true
+	}
+	return turn{}, false
+}
+
+// subagentTurn returns the newest subagent turn of this session, if one landed
+// after the main agent's last turn. Workflow agents nest one level deeper than
+// plain ones, so both layouts are globbed. Modification time picks the file to
+// read, because it is never earlier than the newest record inside it, and the
+// record timestamp then decides the winner.
+func subagentTurn(transcript string, after time.Time) (turn, bool) {
+	root := strings.TrimSuffix(transcript, ".jsonl") + "/subagents"
+	paths, _ := filepath.Glob(filepath.Join(root, "agent-*.jsonl"))
+	nested, _ := filepath.Glob(filepath.Join(root, "workflows", "*", "agent-*.jsonl"))
+	paths = append(paths, nested...)
+
+	newest, newestAt := "", after
+	for _, path := range paths {
+		fi, err := os.Stat(path)
+		if err != nil || !fi.ModTime().After(newestAt) {
+			continue
+		}
+		newest, newestAt = path, fi.ModTime()
+	}
+	if newest == "" {
+		return turn{}, false
+	}
+	tail, ok := readTail(newest, transcriptTailBytes)
+	if !ok {
+		return turn{}, false
+	}
+	t, ok := parseLastTurn(tail)
+	if !ok || t.agent == "" || !t.at.After(after) {
+		return turn{}, false
+	}
+	return t, true
+}
+
+// lastTurn needs the main agent's own last turn as the comparison point. With
+// no readable main turn there is nothing to compare against, and every subagent
+// file in the session would qualify, however long ago it finished.
+func lastTurn(transcript string, tail []byte) (turn, bool) {
+	if transcript == "" {
+		return turn{}, false
+	}
+	main, ok := parseLastTurn(tail)
+	if !ok {
+		return turn{}, false
+	}
+	if sub, ok := subagentTurn(transcript, main.at); ok {
+		return sub, true
+	}
+	return main, true
+}
+
+// shortModel reduces a model ID to the family name the payload's display name
+// would have given: "claude-sonnet-5" and "claude-haiku-4-5-20251001" both
+// shorten the way "Sonnet 5" and "Haiku 4.5" do.
+func shortModel(id string) string {
+	s := strings.ToLower(strings.TrimPrefix(id, "claude-"))
+	if i := strings.IndexAny(s, "-["); i > 0 {
+		s = s[:i]
+	}
+	return s
+}
+
+// subagentMark distinguishes a subagent turn from a main-agent one at a glance,
+// so "sonnet" on the line is never read as the session model.
+const subagentMark = "\u2937 "
+
+// Agent names are free text: a workflow step can label itself with a whole file
+// path. The line already carries six other segments, so the name is bounded.
+const agentNameMax = 12
+
+func agentLabel(name string) string {
+	name = strings.ToLower(name)
+	r := []rune(name)
+	if len(r) <= agentNameMax {
+		return name
+	}
+	return string(r[:agentNameMax]) + "…"
+}
+
+// modelSegment names the model that produced the last turn, and the advisor
+// model alongside it when the two differ. Advisor and main model are usually
+// the same, so an always-on advisor label would repeat the same word all day.
+// The case worth seeing is the mismatch: a sonnet subagent advised by opus.
+func modelSegment(p *payload, t turn, haveTurn bool) (segment, bool) {
+	family, effort := "", p.Effort.Level
+	if p.Model.DisplayName != "" {
+		family = strings.ToLower(strings.Fields(p.Model.DisplayName)[0])
+	}
+	name := family
+	if haveTurn && t.agent != "" {
+		family = shortModel(t.model)
+		name = subagentMark + agentLabel(t.agent) + "·" + family
+		effort = t.effort
+	}
+	if name == "" {
+		return segment{}, false
+	}
+	if e := effortAbbrev(effort); e != "" {
+		name += "·" + e
+	}
+	if haveTurn && t.advisor != "" && shortModel(t.advisor) != family {
+		name += " +adv " + shortModel(t.advisor)
+	}
+	return segment{name, idModel, idModel, stateNormal}, true
 }
 
 // gitBranch resolves the current branch by reading .git/HEAD directly.
@@ -412,14 +578,7 @@ func parseLastUsage(tail []byte) (usageEntry, bool) {
 	return usageEntry{at, ttl}, true
 }
 
-func cacheSegment(p *payload, now time.Time) (segment, bool) {
-	if p.TranscriptPath == "" {
-		return segment{}, false
-	}
-	tail, ok := readTail(p.TranscriptPath, transcriptTailBytes)
-	if !ok {
-		return segment{}, false
-	}
+func cacheSegment(tail []byte, now time.Time) (segment, bool) {
 	e, ok := parseLastUsage(tail)
 	if !ok {
 		return segment{}, false

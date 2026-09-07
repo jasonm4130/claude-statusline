@@ -154,16 +154,12 @@ func TestReadTailMissingFile(t *testing.T) {
 }
 
 func TestCacheSegment(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "t.jsonl")
-	if err := os.WriteFile(path, []byte(line("2026-08-27T11:00:00Z", 964, 0)), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	tail := []byte(line("2026-08-27T11:00:00Z", 964, 0))
 	at, _ := time.Parse(time.RFC3339, "2026-08-27T11:00:00Z")
 	expiry := at.Add(time.Hour)
 
 	t.Run("before expiry shows the absolute clock time", func(t *testing.T) {
-		s, ok := cacheSegment(&payload{TranscriptPath: path}, expiry.Add(-30*time.Minute))
+		s, ok := cacheSegment(tail, expiry.Add(-30*time.Minute))
 		if !ok {
 			t.Fatal("segment absent")
 		}
@@ -177,7 +173,7 @@ func TestCacheSegment(t *testing.T) {
 	})
 
 	t.Run("at expiry is already cold", func(t *testing.T) {
-		s, ok := cacheSegment(&payload{TranscriptPath: path}, expiry)
+		s, ok := cacheSegment(tail, expiry)
 		if !ok {
 			t.Fatal("segment absent")
 		}
@@ -190,7 +186,7 @@ func TestCacheSegment(t *testing.T) {
 	})
 
 	t.Run("past expiry is cold", func(t *testing.T) {
-		s, ok := cacheSegment(&payload{TranscriptPath: path}, expiry.Add(90*time.Minute))
+		s, ok := cacheSegment(tail, expiry.Add(90*time.Minute))
 		if !ok {
 			t.Fatal("segment absent")
 		}
@@ -199,16 +195,9 @@ func TestCacheSegment(t *testing.T) {
 		}
 	})
 
-	t.Run("no transcript path yields no segment", func(t *testing.T) {
-		if _, ok := cacheSegment(&payload{}, time.Now()); ok {
-			t.Error("segment present without a transcript path")
-		}
-	})
-
-	t.Run("unreadable transcript yields no segment", func(t *testing.T) {
-		p := &payload{TranscriptPath: filepath.Join(dir, "missing.jsonl")}
-		if _, ok := cacheSegment(p, time.Now()); ok {
-			t.Error("segment present for a missing transcript")
+	t.Run("no transcript yields no segment", func(t *testing.T) {
+		if _, ok := cacheSegment(nil, time.Now()); ok {
+			t.Error("segment present without a transcript")
 		}
 	})
 }
@@ -333,6 +322,222 @@ func TestLimitSegments(t *testing.T) {
 	t.Run("absent rate limits", func(t *testing.T) {
 		if segs := limitSegments(&payload{}, now); len(segs) != 0 {
 			t.Errorf("got %d segments, want 0", len(segs))
+		}
+	})
+}
+
+// turnLine builds one assistant transcript record. An empty agent models the
+// main agent, whose records carry no attributionAgent key at all.
+func turnLine(ts, model, effort, advisor, agent string) string {
+	attr := ""
+	if agent != "" {
+		attr = fmt.Sprintf(`"attributionAgent":%q,`, agent)
+	}
+	return fmt.Sprintf(
+		`{"type":"assistant","timestamp":%q,"effort":%q,"advisorModel":%q,%s`+
+			`"message":{"role":"assistant","model":%q}}`,
+		ts, effort, advisor, attr, model)
+}
+
+func TestParseLastTurn(t *testing.T) {
+	t.Run("newest assistant record wins", func(t *testing.T) {
+		body := strings.Join([]string{
+			turnLine("2026-09-07T01:00:00Z", "claude-opus-5", "high", "claude-opus-5", ""),
+			`{"type":"user","timestamp":"2026-09-07T01:05:00Z","message":{"role":"user"}}`,
+			turnLine("2026-09-07T01:07:00Z", "claude-sonnet-5", "medium", "claude-opus-5", "Explore"),
+		}, "\n")
+		got, ok := parseLastTurn([]byte(body))
+		if !ok {
+			t.Fatal("no turn found")
+		}
+		if got.agent != "Explore" || got.model != "claude-sonnet-5" || got.effort != "medium" {
+			t.Errorf("turn = %+v", got)
+		}
+		if got.advisor != "claude-opus-5" {
+			t.Errorf("advisor = %q", got.advisor)
+		}
+		want, _ := time.Parse(time.RFC3339, "2026-09-07T01:07:00Z")
+		if !got.at.Equal(want) {
+			t.Errorf("at = %v, want %v", got.at, want)
+		}
+	})
+
+	t.Run("malformed and modelless records are skipped", func(t *testing.T) {
+		body := strings.Join([]string{
+			turnLine("2026-09-07T01:00:00Z", "claude-opus-5", "high", "", ""),
+			`{"type":"assistant","timestamp":"2026-09-07T01:02:00Z","message":{"role":"assistant"}}`,
+			`{"type":"assistant","timestamp":"broken`,
+		}, "\n")
+		got, ok := parseLastTurn([]byte(body))
+		if !ok || got.model != "claude-opus-5" {
+			t.Errorf("turn = %+v, ok = %v", got, ok)
+		}
+	})
+
+	t.Run("no assistant record", func(t *testing.T) {
+		if _, ok := parseLastTurn([]byte(`{"type":"user","message":{"role":"user"}}`)); ok {
+			t.Error("found a turn where there is none")
+		}
+	})
+}
+
+func TestShortModel(t *testing.T) {
+	cases := map[string]string{
+		"claude-sonnet-5":           "sonnet",
+		"claude-opus-5":             "opus",
+		"claude-opus-5[1m]":         "opus",
+		"claude-haiku-4-5-20251001": "haiku",
+		"sonnet":                    "sonnet",
+	}
+	for in, want := range cases {
+		if got := shortModel(in); got != want {
+			t.Errorf("shortModel(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestModelSegment(t *testing.T) {
+	mk := func(display, effort string) *payload {
+		p := &payload{}
+		p.Model.DisplayName = display
+		p.Effort.Level = effort
+		return p
+	}
+	at, _ := time.Parse(time.RFC3339, "2026-09-07T01:07:00Z")
+
+	cases := []struct {
+		name     string
+		p        *payload
+		t        turn
+		haveTurn bool
+		want     string
+		wantOK   bool
+	}{
+		{
+			name: "main agent falls back to the payload",
+			p:    mk("Opus 5", "high"), want: "opus·high", wantOK: true,
+		},
+		{
+			name:     "advisor stays hidden when it matches the working model",
+			p:        mk("Opus 5", "high"),
+			t:        turn{at: at, model: "claude-opus-5", effort: "high", advisor: "claude-opus-5"},
+			haveTurn: true, want: "opus·high", wantOK: true,
+		},
+		{
+			name: "a subagent turn names the agent and its own model",
+			p:    mk("Opus 5", "high"),
+			t: turn{at: at, agent: "Explore", model: "claude-sonnet-5", effort: "medium",
+				advisor: "claude-opus-5"},
+			haveTurn: true, want: "⤷ explore·sonnet·med +adv opus", wantOK: true,
+		},
+		{
+			name: "a subagent on the session model shows no advisor",
+			p:    mk("Opus 5", "high"),
+			t: turn{at: at, agent: "workhorse", model: "claude-opus-5", effort: "max",
+				advisor: "claude-opus-5"},
+			haveTurn: true, want: "⤷ workhorse·opus·max", wantOK: true,
+		},
+		{
+			name: "a long agent name is bounded",
+			p:    mk("Opus 5", "high"),
+			t: turn{at: at, agent: "verify:app/services/letters/send.rb", model: "claude-sonnet-5",
+				effort: "low", advisor: "claude-sonnet-5"},
+			haveTurn: true, want: "⤷ verify:app/s…·sonnet·low", wantOK: true,
+		},
+		{
+			name: "no model anywhere yields no segment",
+			p:    mk("", ""), wantOK: false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := modelSegment(c.p, c.t, c.haveTurn)
+			if ok != c.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, c.wantOK)
+			}
+			if ok && got.text != c.want {
+				t.Errorf("text = %q, want %q", got.text, c.want)
+			}
+		})
+	}
+}
+
+func TestLastTurn(t *testing.T) {
+	// write lays a transcript down with a fixed modification time, so the file
+	// order the code sees does not depend on how fast the test runs.
+	write := func(t *testing.T, path, body string, mtime time.Time) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
+	}
+	base, _ := time.Parse(time.RFC3339, "2026-09-07T01:00:00Z")
+	main := turnLine("2026-09-07T01:05:00Z", "claude-opus-5", "high", "claude-opus-5", "")
+
+	t.Run("a fresher subagent turn wins", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "s.jsonl")
+		write(t, path, main, base.Add(5*time.Minute))
+		write(t, filepath.Join(dir, "s", "subagents", "agent-abc.jsonl"),
+			turnLine("2026-09-07T01:07:00Z", "claude-sonnet-5", "medium", "claude-opus-5", "Explore"),
+			base.Add(7*time.Minute))
+
+		got, ok := lastTurn(path, []byte(main))
+		if !ok || got.agent != "Explore" {
+			t.Fatalf("turn = %+v, ok = %v", got, ok)
+		}
+	})
+
+	t.Run("a finished subagent loses to a newer main turn", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "s.jsonl")
+		write(t, path, main, base.Add(5*time.Minute))
+		write(t, filepath.Join(dir, "s", "subagents", "agent-abc.jsonl"),
+			turnLine("2026-09-07T01:02:00Z", "claude-sonnet-5", "medium", "claude-opus-5", "Explore"),
+			base.Add(2*time.Minute))
+
+		got, ok := lastTurn(path, []byte(main))
+		if !ok || got.agent != "" || got.model != "claude-opus-5" {
+			t.Fatalf("turn = %+v, ok = %v", got, ok)
+		}
+	})
+
+	t.Run("workflow agents nest one level deeper and still count", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "s.jsonl")
+		write(t, path, main, base.Add(5*time.Minute))
+		write(t, filepath.Join(dir, "s", "subagents", "workflows", "wf_1", "agent-abc.jsonl"),
+			turnLine("2026-09-07T01:09:00Z", "claude-haiku-4-5-20251001", "low", "claude-opus-5", "review:bugs"),
+			base.Add(9*time.Minute))
+
+		got, ok := lastTurn(path, []byte(main))
+		if !ok || got.agent != "review:bugs" || got.model != "claude-haiku-4-5-20251001" {
+			t.Fatalf("turn = %+v, ok = %v", got, ok)
+		}
+	})
+
+	t.Run("no transcript path", func(t *testing.T) {
+		if _, ok := lastTurn("", nil); ok {
+			t.Error("found a turn without a transcript")
+		}
+	})
+
+	t.Run("an unreadable main turn suppresses the subagent lookup", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "s.jsonl")
+		write(t, path, "", base)
+		write(t, filepath.Join(dir, "s", "subagents", "agent-abc.jsonl"),
+			turnLine("2026-09-07T01:07:00Z", "claude-sonnet-5", "medium", "claude-opus-5", "Explore"),
+			base.Add(7*time.Minute))
+
+		if got, ok := lastTurn(path, nil); ok {
+			t.Errorf("turn = %+v, want none", got)
 		}
 	})
 }

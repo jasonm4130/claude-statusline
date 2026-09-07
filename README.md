@@ -46,7 +46,7 @@ Each segment disappears when its data is absent, and the alternating backgrounds
 |---|---|---|
 | directory | `claude-statusline` | payload `workspace.current_dir`, then `cwd`, then `$PWD` on a parse failure |
 | git | `main*` | `.git/HEAD` read directly; `*` from `git status --porcelain` |
-| model | `opus·high` | payload `model` and `effort` |
+| model | `opus·high`, or `⤷ explore·sonnet·med +adv opus` while a subagent works | payload `model` and `effort`, or the transcript when a subagent wrote the last turn |
 | context | `132k/400k 33%` | payload `context_window` against the auto-compact window |
 | cache | `cache→22:56` | prompt-cache expiry, parsed from the transcript |
 | weekly limit | `7d 23%→29% Sun` | payload `rate_limits.seven_day` |
@@ -68,6 +68,16 @@ The projection is suppressed below 5% elapsed, where used-over-elapsed is domina
 
 Each window renders as its own segment so that it can carry its own colour. A hot five-hour window should not repaint a healthy weekly one.
 
+### Which agent spoke last
+
+The payload names the session model, so it does not move while a subagent works. The transcript moves. A subagent writes its own file under `<transcript>/subagents`, and every assistant record there carries the agent type, the model and the effort. The segment compares the newest assistant record in the main transcript with the newest one in the freshest subagent file, then names whichever agent wrote last.
+
+That claim is about the past, so it survives a frozen render. A live "a subagent is running" badge would not, because the statusline is called on state change and the badge would outlive the agent. Measured here with a logging wrapper, the command ran three times inside a 23-second subagent run, so the label does appear while the agent works.
+
+The advisor model rides in the same segment, and only when it differs from the model that wrote the last turn. Advisor and session model are usually the same, so a permanent label would repeat one word all day. The case worth seeing is the mismatch: a sonnet subagent advised by opus.
+
+Parallel agents are the one gap. The newest record wins, so a fan-out of four names whichever of them wrote last.
+
 ### Prompt-cache expiry
 
 The cache segment shows an absolute clock time rather than a countdown. A countdown, or a warm/expired badge, freezes mid-session and quietly becomes a lie — exactly when a quiet session is when you want to know. `cache→22:56` is still true at 23:30, because the arithmetic happened once and does not decay. The one claim safe to render is the negative one, so once the clock has passed, the segment reads `cache cold` and stays honest: expiry only moves forward when a new request lands, and a new request re-renders.
@@ -77,6 +87,8 @@ Both inputs come from the `transcript_path` the payload already supplies. The ti
 ### Latency
 
 Nothing on the line is allowed to make the prompt wait. The git branch comes from reading `.git/HEAD` directly rather than shelling out. The dirty marker is the one subprocess, and it runs under a 150 ms timeout and is dropped rather than waited on.
+
+Two file reads land on the same path. The main transcript is read once and serves both the cache clock and the agent label. The freshest subagent file is read only when its modification time beats the main agent's last turn. Both reads are capped at 512 KB taken from the end of the file. Measured against a session holding 100 subagent files of 560 KB each, the whole lookup costs 0.28 ms on an M5.
 
 ## Palette
 
