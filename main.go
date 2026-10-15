@@ -435,7 +435,7 @@ func contextSegment(p *payload) (segment, bool) {
 	}
 	u := cw.CurrentUsage
 	used := u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens
-	target := autoCompactTarget()
+	target := autoCompactTarget(p.Model.ID)
 	if target <= 0 {
 		target = cw.ContextWindowSize
 	} else if cw.ContextWindowSize > 0 && target > cw.ContextWindowSize {
@@ -454,26 +454,42 @@ func roundK(v int) int {
 	return int(math.Round(float64(v) / 1000))
 }
 
-func autoCompactTarget() int {
+// autoCompactTarget resolves the auto-compact window the way Claude Code does:
+// the env override, then the model's own modelSettings entry, then the global
+// autoCompactWindow, read from CLAUDE_CONFIG_DIR when a session runs under one.
+func autoCompactTarget(modelID string) int {
 	if v := os.Getenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW"); v != "" {
 		var n int
 		if _, err := fmt.Sscanf(v, "%d", &n); err == nil && n > 0 {
 			return n
 		}
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return 0
+	dir := os.Getenv("CLAUDE_CONFIG_DIR")
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return 0
+		}
+		dir = filepath.Join(home, ".claude")
 	}
-	b, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	b, err := os.ReadFile(filepath.Join(dir, "settings.json"))
 	if err != nil {
 		return 0
 	}
 	var s struct {
 		AutoCompactWindow float64 `json:"autoCompactWindow"`
+		ModelSettings     map[string]struct {
+			AutoCompactWindow float64 `json:"autoCompactWindow"`
+		} `json:"modelSettings"`
 	}
 	if err := json.Unmarshal(b, &s); err != nil {
 		return 0
+	}
+	base, _, _ := strings.Cut(modelID, "[")
+	for _, id := range []string{modelID, base} {
+		if m, ok := s.ModelSettings[id]; ok && m.AutoCompactWindow > 0 {
+			return int(m.AutoCompactWindow)
+		}
 	}
 	return int(s.AutoCompactWindow)
 }
