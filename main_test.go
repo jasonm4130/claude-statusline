@@ -541,3 +541,28 @@ func TestLastTurn(t *testing.T) {
 		}
 	})
 }
+
+func TestAutoCompactTargetPrefersModelSettings(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	settings := `{"autoCompactWindow": 400000, "modelSettings": {"claude-opus-5-5": {"autoCompactWindow": 500000}}}`
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(settings), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]int{
+		"claude-opus-5-5":     500000,
+		"claude-opus-5-5[1m]": 500000,
+		"claude-sonnet-5-5":   400000,
+		"":                    400000,
+	}
+	for model, want := range cases {
+		if got := autoCompactTarget(model); got != want {
+			t.Errorf("autoCompactTarget(%q) = %d, want %d", model, got, want)
+		}
+	}
+	t.Setenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "123000")
+	if got := autoCompactTarget("claude-opus-5-5"); got != 123000 {
+		t.Errorf("env override = %d, want 123000", got)
+	}
+}
