@@ -86,7 +86,7 @@ Both inputs come from the `transcript_path` the payload already supplies. The ti
 
 ### Latency
 
-Nothing on the line is allowed to make the prompt wait. The git branch comes from reading `.git/HEAD` directly rather than shelling out. The dirty marker is the one subprocess, and it runs under a 150 ms timeout and is dropped rather than waited on.
+Nothing on the line is allowed to make the prompt wait. The git branch comes from reading `.git/HEAD` directly rather than shelling out. The dirty marker is the one subprocess, and it runs under a 150 ms timeout and is dropped rather than waited on. It passes `--no-optional-locks`, so it never rewrites the index or holds `.git/index.lock` against git commands running in the same repo.
 
 Two file reads land on the same path. The main transcript is read once and serves both the cache clock and the agent label. The freshest subagent file is read only when its modification time beats the main agent's last turn. Both reads are capped at 512 KB taken from the end of the file. Measured against a session holding 100 subagent files of 560 KB each, the whole lookup costs 0.28 ms on an M5.
 

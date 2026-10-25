@@ -420,7 +420,7 @@ func findGitDir(dir string) (string, bool) {
 func gitDirty(dir string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-C", dir, "status", "--porcelain", "--untracked-files=no")
+	cmd := exec.CommandContext(ctx, "git", "--no-optional-locks", "-C", dir, "status", "--porcelain", "--untracked-files=no")
 	out, err := cmd.Output()
 	if err != nil {
 		return false
