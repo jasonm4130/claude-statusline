@@ -36,7 +36,7 @@ Point `~/.claude/settings.json` at the binary:
 
 Segment separators use the powerline glyph U+E0BC, so the terminal needs a [Nerd Font](https://www.nerdfonts.com). Colours are 24-bit truecolor.
 
-The context segment measures usage against the auto-compact window rather than the raw context size, because auto-compact is the limit you actually hit. It resolves `CLAUDE_CODE_AUTO_COMPACT_WINDOW` if set, then `autoCompactWindow` from `~/.claude/settings.json`, then falls back to the model's context window size.
+The context segment measures usage against the auto-compact window rather than the raw context size, because auto-compact is the limit you actually hit. It resolves `CLAUDE_CODE_AUTO_COMPACT_WINDOW` if set, then the session model's `modelSettings.<model id>.autoCompactWindow`, then the global `autoCompactWindow`, both from `settings.json` in `CLAUDE_CONFIG_DIR` or `~/.claude`, and falls back to the model's context window size.
 
 ## Segments
 
