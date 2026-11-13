@@ -20,7 +20,36 @@ type promptCache struct {
 	ExpectedRebuilds    int             `json:"expected_rebuilds"`
 	RecacheTokensIfCold int             `json:"recache_tokens_if_cold"`
 	LastMissAt          json.RawMessage `json:"last_miss_at"`
-	LastMissCause       string          `json:"last_miss_cause"`
+	LastMissCause       json.RawMessage `json:"last_miss_cause"`
+}
+
+// UnmarshalJSON never fails: a prompt_cache whose shape has drifted from what
+// this binary knows costs only the cache segment, never the whole line.
+func (pc *promptCache) UnmarshalJSON(b []byte) error {
+	type plain promptCache
+	var v plain
+	if err := json.Unmarshal(b, &v); err != nil {
+		*pc = promptCache{}
+		return nil
+	}
+	*pc = promptCache(v)
+	return nil
+}
+
+// missCause reads last_miss_cause, which Claude Code sends either as a string
+// or as {"causes":["ttl_expired_1h", ...]}. It returns the first cause.
+func (pc *promptCache) missCause() string {
+	var s string
+	if json.Unmarshal(pc.LastMissCause, &s) == nil {
+		return s
+	}
+	var o struct {
+		Causes []string `json:"causes"`
+	}
+	if json.Unmarshal(pc.LastMissCause, &o) == nil && len(o.Causes) > 0 {
+		return o.Causes[0]
+	}
+	return ""
 }
 
 // Freeze rules. The render can sit frozen, so `warm` is never trusted on its
@@ -81,7 +110,7 @@ func payloadCacheSegment(pc *promptCache, now time.Time) (segment, bool) {
 	}
 	if pc.Misses > 0 {
 		text += fmt.Sprintf(" ✗%d", pc.Misses)
-		if c := pc.LastMissCause; c != "" && utf8.RuneCountInString(c) <= missCauseMax {
+		if c := pc.missCause(); c != "" && utf8.RuneCountInString(c) <= missCauseMax {
 			text += " " + c
 		}
 		if t, ok := pc.lastMiss(); !ok || now.Sub(t) < missAlarmFor {
