@@ -13,7 +13,7 @@ A Claude Code status line: one Go binary that reads the statusline JSON on stdin
 
 ## Layout
 
-`main.go` holds the payload, the segment builders and `draw()`. Features added later sit in their own files (`snapshot.go`, `promptcache.go`, `gitcache.go`, `agents.go`) with matching `_test.go` files; follow that pattern rather than growing `main.go`.
+`main.go` holds the payload, the segment builders and `draw()`. Features added later sit in their own files (`snapshot.go`, `promptcache.go`, `gitcache.go`, `agents.go`, `pace.go`) with matching `_test.go` files; follow that pattern rather than growing `main.go`.
 
 ## Checks
 
