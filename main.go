@@ -186,7 +186,7 @@ func build(p *payload) []segment {
 	if s, ok := cacheSegmentFor(p, tail, time.Now()); ok {
 		segs = append(segs, s)
 	}
-	segs = append(segs, limitSegments(p, time.Now())...)
+	segs = append(segs, limitSegmentsWith(p, time.Now(), trackPaceFor(p, time.Now()))...)
 	return segs
 }
 
@@ -655,6 +655,11 @@ func projected(w *window, length time.Duration, now time.Time) (float64, bool) {
 // Each window renders as its own segment so it can carry its own colour: a hot
 // five-hour window should not repaint a healthy weekly one, and vice versa.
 func limitSegments(p *payload, now time.Time) []segment {
+	return limitSegmentsWith(p, now, nil)
+}
+
+// limitSegmentsWith takes the sampled history (pace.go); nil means cumulative.
+func limitSegmentsWith(p *payload, now time.Time, hist paceHist) []segment {
 	rl := p.RateLimits
 	if rl == nil {
 		return nil
@@ -664,10 +669,10 @@ func limitSegments(p *payload, now time.Time) []segment {
 		day = time.Unix(rl.SevenDay.ResetsAt, 0).Local().Format("Mon")
 	}
 	var segs []segment
-	if s, ok := limitWindow("7d", rl.SevenDay, sevenDayLen, day, now); ok {
+	if s, ok := limitWindow("7d", rl.SevenDay, sevenDayLen, day, now, hist["7d"]); ok {
 		segs = append(segs, s)
 	}
-	if s, ok := limitWindow("5h", rl.FiveHour, fiveHourLen, "", now); ok {
+	if s, ok := limitWindow("5h", rl.FiveHour, fiveHourLen, "", now, hist["5h"]); ok {
 		segs = append(segs, s)
 	}
 	return segs
@@ -679,13 +684,24 @@ func limitSegments(p *payload, now time.Time) []segment {
 // terminal with a mangled palette.
 const overPace = "\u25b2 "
 
-func limitWindow(label string, w *window, length time.Duration, suffix string, now time.Time) (segment, bool) {
+func limitWindow(label string, w *window, length time.Duration, suffix string, now time.Time, hist []sample) (segment, bool) {
 	if w == nil {
 		return segment{}, false
 	}
 	st := stateOf(w.UsedPercentage)
 	text := fmt.Sprintf("%s %d%%", label, int(math.Round(w.UsedPercentage)))
-	if proj, ok := projected(w, length, now); ok {
+	if pt, over, ok := paceText(label, w, hist, now); ok {
+		text += pt
+		if over {
+			text = overPace + text
+			if st < stateWarming {
+				st = stateWarming
+			}
+		}
+		if strings.Contains(pt, "cap") {
+			suffix = "" // the cap day is the news; the reset day would muddy it
+		}
+	} else if proj, ok := projected(w, length, now); ok {
 		text += fmt.Sprintf("\u2192%d%%", int(math.Round(proj)))
 		if proj >= 100 {
 			text = overPace + text
