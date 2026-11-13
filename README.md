@@ -38,6 +38,8 @@ Segment separators use the powerline glyph U+E0BC, so the terminal needs a [Nerd
 
 The context segment measures usage against the auto-compact window rather than the raw context size, because auto-compact is the limit you actually hit. It resolves `CLAUDE_CODE_AUTO_COMPACT_WINDOW` if set, then the session model's `modelSettings.<model id>.autoCompactWindow`, then the global `autoCompactWindow`, both from `settings.json` in `CLAUDE_CONFIG_DIR` or `~/.claude`, and falls back to the model's context window size.
 
+Set `CLAUDE_STATUSLINE_SNAPSHOT` to a file path to keep the latest payload that carries `rate_limits`. The raw stdin bytes are written atomically (a `0600` temp file in the same directory, then a rename; a missing parent directory is created `0700`). A payload without `rate_limits` never overwrites an existing snapshot, and any error is silent and never affects the rendered line or exit code.
+
 ## Segments
 
 Each segment disappears when its data is absent, and the alternating backgrounds re-alternate around the gap, so a missing segment never leaves two same-coloured neighbours touching. If stdin cannot be parsed at all, the line degrades to the basename of `$PWD` rather than blanking.
@@ -89,6 +91,8 @@ Both inputs come from the `transcript_path` the payload already supplies. The ti
 Nothing on the line is allowed to make the prompt wait. The git branch comes from reading `.git/HEAD` directly rather than shelling out. The dirty marker is the one subprocess, and it runs under a 150 ms timeout and is dropped rather than waited on. It passes `--no-optional-locks`, so it never rewrites the index or holds `.git/index.lock` against git commands running in the same repo.
 
 Two file reads land on the same path. The main transcript is read once and serves both the cache clock and the agent label. The freshest subagent file is read only when its modification time beats the main agent's last turn. Both reads are capped at 512 KB taken from the end of the file. Measured against a session holding 100 subagent files of 560 KB each, the whole lookup costs 0.28 ms on an M5.
+
+`go test -bench Render -benchmem` renders a realistic payload (400-line transcript, no git) in about 89 µs and 96 allocations per call on an M-series Mac. That is the in-process cost only; the process as a whole measured about 2.5 ms without git and 14.5 ms with it, so the git dirty check dominates and process start-up is the rest. Folding the snapshot tee into the binary (`CLAUDE_STATUSLINE_SNAPSHOT`) replaces a bash wrapper that added about 11 ms per render.
 
 ## Palette
 
