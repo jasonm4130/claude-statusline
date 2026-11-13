@@ -101,12 +101,12 @@ func payloadCacheSegment(pc *promptCache, now time.Time) (segment, bool) {
 	expiry := time.Unix(pc.ExpiresAt, 0)
 	text, st, fgc := "", stateNormal, idCache
 	if !now.Before(expiry) {
-		text, st, fgc = "cache cold", stateWarming, fgWarm
+		text, st, fgc = iconCache+"cold", stateWarming, fgWarm
 		if pc.RecacheTokensIfCold > 0 {
-			text += fmt.Sprintf(" · %dk recache", roundK(pc.RecacheTokensIfCold))
+			text += fmt.Sprintf(" · %dk", roundK(pc.RecacheTokensIfCold))
 		}
 	} else {
-		text = "cache→" + expiry.Local().Format("15:04")
+		text = iconCache + expiry.Local().Format("15:04")
 	}
 	if pc.Misses > 0 {
 		text += fmt.Sprintf(" ✗%d", pc.Misses)

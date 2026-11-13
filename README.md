@@ -9,7 +9,7 @@ A status line for [Claude Code](https://claude.com/claude-code) that tells you h
 
 ![Three rendered states: on pace, five-hour window over pace, weekly window nearly spent](docs/statusline.svg)
 
-The rate-limit segments project each window forward to its reset from the trailing burn rate. `5h 13%→32%` means the current pace ends the five-hour window at 32%, spend freely. `▲ 5h 72% cap 15:40` means the cap arrives at 15:40, before the reset does.
+The rate-limit segments project each window forward to its reset from the trailing burn rate. `󰔛 13→32%` means the current pace ends the five-hour window at 32%, spend freely. `▲ 󰔛 72% cap 15:40` means the cap arrives at 15:40, before the reset does.
 
 ## Install
 
@@ -36,7 +36,7 @@ Point `~/.claude/settings.json` at the binary:
 
 `refreshInterval` (Claude Code 2.1.323 and later) re-runs the command every N seconds on top of the event-driven updates. It is optional; the line is built to stay true without it. 30 is a good value: it lets `cache cold` and the falling pace projections catch up during a quiet spell, and a render in a dirty repo costs about 2.5 ms once the dirty check is cached (see [Latency](#latency)).
 
-Segment separators use the powerline glyph U+E0BC, so the terminal needs a [Nerd Font](https://www.nerdfonts.com). Colours are 24-bit truecolor.
+Segment separators use the powerline glyph U+E0BC and each segment leads with a Nerd Font icon in place of a word, so the terminal needs a [Nerd Font](https://www.nerdfonts.com). Colours are 24-bit truecolor.
 
 The context segment measures usage against the auto-compact window rather than the raw context size, because auto-compact is the limit you actually hit. It resolves `CLAUDE_CODE_AUTO_COMPACT_WINDOW` if set, then the session model's `modelSettings.<model id>.autoCompactWindow`, then the global `autoCompactWindow`, both from `settings.json` in `CLAUDE_CONFIG_DIR` or `~/.claude`, and falls back to the model's context window size.
 
@@ -48,13 +48,13 @@ Each segment disappears when its data is absent, and the alternating backgrounds
 
 | Segment | Example | Source |
 |---|---|---|
-| directory | `claude-statusline` | payload `workspace.current_dir`, then `cwd`, then `$PWD` on a parse failure |
-| git | `main*` | `.git/HEAD` read directly; `*` from `git status --porcelain`, cached briefly per repo |
-| model | `opus·high`, `opus·high ⚡` in fast mode, or `⤷ explore·sonnet·med +adv opus` while a subagent works, with `(3 agents)` after a fan-out | payload `model`, `effort` and `fast_mode`, or the transcript when a subagent wrote the last turn |
-| context | `132k/400k 33%` | payload `context_window` against the auto-compact window |
-| cache | `cache→22:56`, `cache cold · 66k recache`, `cache→22:56 ✗2` | payload `prompt_cache`, else prompt-cache expiry parsed from the transcript |
-| weekly limit | `7d 23%→29% Sun`, `▲ 7d 80% cap Thu 14:00` | payload `rate_limits.seven_day` |
-| session limit | `5h 13%→32%`, `▲ 5h 62% cap 15:40` | payload `rate_limits.five_hour` |
+| directory | ` claude-statusline` | payload `workspace.current_dir`, then `cwd`, then `$PWD` on a parse failure |
+| git | ` main●` | `.git/HEAD` read directly; `●` from `git status --porcelain`, cached briefly per repo |
+| model | `󰚩 opus·high`, `󰚩 opus·high ⚡` in fast mode, or `󰚩 ⤷ explore·sonnet·med` while a subagent works, with `×3` after a fan-out | payload `model`, `effort` and `fast_mode`, or the transcript when a subagent wrote the last turn |
+| context | `󰍛 33%` | payload `context_window` against the auto-compact window |
+| cache | `󰅐 22:56`, `󰅐 cold · 66k`, `󰅐 22:56 ✗2` | payload `prompt_cache`, else prompt-cache expiry parsed from the transcript |
+| weekly limit | `󰔟 23→29%`, `▲ 󰔟 80% cap Thu 14:00` | payload `rate_limits.seven_day` |
+| session limit | `󰔛 13→32%`, `▲ 󰔛 62% cap 15:40` | payload `rate_limits.five_hour` |
 
 ## Design notes
 
@@ -64,7 +64,7 @@ By default Claude Code runs the statusline command on state change, never on a t
 
 Each window has a known length, so `resets_at` fixes its start. The projection uses the **trailing rate**: every render records `(time, used%)` per window in one small state file shared across sessions (`pace.json` in the cache directory next to the dirty-check cache), and the rate is the slope over the last 40 minutes for the five-hour window or the last 24 hours for the weekly one (a full day, so sleep does not skew it). The projection is `used + rate x time to reset`. A burst early in the window stops counting once it leaves the trailing slice, and a burst after an idle stretch shows up within minutes instead of being diluted into the whole window's average. It is a two-point slope rather than a smoothed average because samples are irregular and `used_percentage` is a whole number.
 
-If the cap would arrive before the reset, the segment warms, takes a `▲`, and shows when: `▲ 5h 62% cap 15:40`, or `▲ 7d 80% cap Thu 14:00` when that is not today. Otherwise it shows the projected percent at reset, `5h 13%→32%`. Until the history spans 10 minutes (five-hour) or 24 hours (weekly), or whenever the state file cannot be read or written, it falls back to the old cumulative figure: used percent divided by the fraction of the window elapsed, suppressed below 5% elapsed. A window that is absent from the payload (some accounts have no five-hour window) is simply skipped and records nothing. The history for a window is cleared when its `resets_at` changes or used percent drops.
+If the cap would arrive before the reset, the segment warms, takes a `▲`, and shows when: `▲ 󰔛 62% cap 15:40`, or `▲ 󰔟 80% cap Thu 14:00` when that is not today. Otherwise it shows the used and projected percent at reset, `󰔛 13→32%`. Until the history spans 10 minutes (five-hour) or 24 hours (weekly), or whenever the state file cannot be read or written, it falls back to the old cumulative figure: used percent divided by the fraction of the window elapsed, suppressed below 5% elapsed. A window that is absent from the payload (some accounts have no five-hour window) is simply skipped and records nothing. The history for a window is cleared when its `resets_at` changes or used percent drops.
 
 `used_percentage` is the server's figure, from the claude.ai usage endpoint, so the unit is percent of quota rather than tokens, already weighted for model and cache, and counting your usage on other machines too.
 
@@ -78,15 +78,15 @@ The payload names the session model, so it does not move while a subagent works.
 
 That claim is about the past, so it survives a frozen render. A live "a subagent is running" badge would not, because the statusline is called on state change and the badge would outlive the agent. Measured here with a logging wrapper, the command ran three times inside a 23-second subagent run, so the label does appear while the agent works.
 
-The advisor model rides in the same segment, and only when it differs from the model that wrote the last turn. Advisor and session model are usually the same, so a permanent label would repeat one word all day. The case worth seeing is the mismatch: a sonnet subagent advised by opus.
+The advisor model is not shown: it is configured once per session and rarely changes, so a label for it repeats the same word all day.
 
-Parallel agents get a count. The newest record still names the label, so a fan-out of four names whichever of them wrote last, and `(4 agents)` follows it: the number of subagent transcripts written since the main agent's own last turn. That window is chosen to keep the claim about the past. It cannot become false while frozen, only incomplete, and it needs no clock: sequential agents always have a main-agent turn between them, so only agents working alongside each other share it. The count appears only on a subagent label and only above one.
+Parallel agents get a count. The newest record still names the label, so a fan-out of four names whichever of them wrote last, and `×4` follows it: the number of subagent transcripts written since the main agent's own last turn. That window is chosen to keep the claim about the past. It cannot become false while frozen, only incomplete, and it needs no clock: sequential agents always have a main-agent turn between them, so only agents working alongside each other share it. The count appears only on a subagent label and only above one.
 
 ### Prompt-cache expiry
 
-The cache segment shows an absolute clock time rather than a countdown. A countdown, or a warm/expired badge, freezes mid-session and quietly becomes a lie — exactly when a quiet session is when you want to know. `cache→22:56` is still true at 23:30, because the arithmetic happened once and does not decay. The one claim safe to render is the negative one, so once the clock has passed, the segment reads `cache cold` and stays honest: expiry only moves forward when a new request lands, and a new request re-renders.
+The cache segment shows an absolute clock time rather than a countdown. A countdown, or a warm/expired badge, freezes mid-session and quietly becomes a lie — exactly when a quiet session is when you want to know. `󰅐 22:56` is still true at 23:30, because the arithmetic happened once and does not decay. The one claim safe to render is the negative one, so once the clock has passed, the segment reads `󰅐 cold` and stays honest: expiry only moves forward when a new request lands, and a new request re-renders.
 
-Claude Code 2.1.323 and later send a `prompt_cache` object in the payload, and the segment prefers it: `expires_at` is the clock, with no inference. The `warm` flag is deliberately ignored, since it is as stale as any other frozen render; the segment is cold when `expires_at` is at or before the time of rendering. A cold segment appends the cost of resuming, `recache_tokens_if_cold`, as `cache cold · 66k recache`. The transcript path below remains the fallback when `prompt_cache` is absent, `caching_observed` is false, or `expires_at` is missing.
+Claude Code 2.1.323 and later send a `prompt_cache` object in the payload, and the segment prefers it: `expires_at` is the clock, with no inference. The `warm` flag is deliberately ignored, since it is as stale as any other frozen render; the segment is cold when `expires_at` is at or before the time of rendering. A cold segment appends the cost of resuming, `recache_tokens_if_cold`, as `󰅐 cold · 66k`. The transcript path below remains the fallback when `prompt_cache` is absent, `caching_observed` is false, or `expires_at` is missing.
 
 `misses` counts misses Claude Code did not plan for; planned rebuilds go to `expected_rebuilds` and are never shown (a live payload with one expected rebuild and zero misses suggests the two are disjoint). Any `misses > 0` appends `✗N`, plus `last_miss_cause` when it is eight characters or fewer, and warms the segment for 15 minutes after `last_miss_at` (or indefinitely when that time is unknown). After that the count stays but the amber fades. The count is cumulative, so it is still true when frozen.
 

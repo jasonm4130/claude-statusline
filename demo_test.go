@@ -67,11 +67,11 @@ func demoRows(t *testing.T, now time.Time) []demoRow {
 	// making a claim about -- context, pace, thresholds, colour -- comes from
 	// the real functions.
 	fixed := []segment{
-		{"claude-statusline", idDir, txtDir, stateNormal},
-		{"main*", idGit, idGit, stateNormal},
-		{"opus·high", idModel, idModel, stateNormal},
+		{iconDir + "claude-statusline", idDir, txtDir, stateNormal},
+		{iconBranch + "main" + dirtyMark, idGit, idGit, stateNormal},
+		{iconModel + "opus·high", idModel, idModel, stateNormal},
 	}
-	cache := segment{"cache→22:56", idCache, idCache, stateNormal}
+	cache := segment{iconCache + "22:56", idCache, idCache, stateNormal}
 
 	build := func(p *payload) []segment {
 		segs := append([]segment{}, fixed...)
@@ -243,7 +243,7 @@ func renderSVG(lines []svgLine) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%.0f" height="%.0f" viewBox="0 0 %.0f %.0f" role="img" aria-label="claude-statusline rendered in three states">`+"\n", w, h, w, h)
 	fmt.Fprintf(&b, `<rect width="%.0f" height="%.0f" rx="8" fill="%s"/>`+"\n", w, h, hex(page))
-	fmt.Fprintf(&b, `<g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="%.0f">`+"\n", svgFontSize)
+	fmt.Fprintf(&b, `<g font-family="'Symbols Nerd Font Mono','JetBrainsMono Nerd Font',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="%.0f">`+"\n", svgFontSize)
 
 	y := svgPad
 	for _, l := range lines {

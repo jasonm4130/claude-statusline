@@ -52,7 +52,7 @@ func TestWithAgentCount(t *testing.T) {
 		have bool
 		want string
 	}{
-		{"fan-out", turn{agent: "Explore", agents: 3}, true, "⤷ explore·sonnet·med (3 agents)"},
+		{"fan-out", turn{agent: "Explore", agents: 3}, true, "⤷ explore·sonnet·med ×3"},
 		{"lone agent says nothing extra", turn{agent: "Explore", agents: 1}, true, "⤷ explore·sonnet·med"},
 		{"main agent turn never carries a count", turn{agents: 3}, true, "⤷ explore·sonnet·med"},
 		{"no turn", turn{}, false, "⤷ explore·sonnet·med"},

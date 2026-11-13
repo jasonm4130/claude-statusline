@@ -23,7 +23,7 @@ import "strconv"
 // is already said by the label itself.
 func withAgentCount(s segment, t turn, haveTurn bool) segment {
 	if haveTurn && t.agent != "" && t.agents > 1 {
-		s.text += " (" + strconv.Itoa(t.agents) + " agents)"
+		s.text += " ×" + strconv.Itoa(t.agents)
 	}
 	return s
 }
