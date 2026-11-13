@@ -9,7 +9,7 @@ A status line for [Claude Code](https://claude.com/claude-code) that tells you h
 
 ![Three rendered states: on pace, five-hour window over pace, weekly window nearly spent](docs/statusline.svg)
 
-The rate-limit segments project each window forward to its reset. `5h 13%→32%` means the current burn ends the five-hour window at 32% — spend freely. `▲ 5h 72%→175%` means the cap arrives before the reset does.
+The rate-limit segments project each window forward to its reset from the trailing burn rate. `5h 13%→32%` means the current pace ends the five-hour window at 32%, spend freely. `▲ 5h 72% cap 15:40` means the cap arrives at 15:40, before the reset does.
 
 ## Install
 
@@ -53,8 +53,8 @@ Each segment disappears when its data is absent, and the alternating backgrounds
 | model | `opus·high`, `opus·high ⚡` in fast mode, or `⤷ explore·sonnet·med +adv opus` while a subagent works, with `(3 agents)` after a fan-out | payload `model`, `effort` and `fast_mode`, or the transcript when a subagent wrote the last turn |
 | context | `132k/400k 33%` | payload `context_window` against the auto-compact window |
 | cache | `cache→22:56`, `cache cold · 66k recache`, `cache→22:56 ✗2` | payload `prompt_cache`, else prompt-cache expiry parsed from the transcript |
-| weekly limit | `7d 23%→29% Sun` | payload `rate_limits.seven_day` |
-| session limit | `5h 13%→32%` | payload `rate_limits.five_hour` |
+| weekly limit | `7d 23%→29% Sun`, `▲ 7d 80% cap Thu 14:00` | payload `rate_limits.seven_day` |
+| session limit | `5h 13%→32%`, `▲ 5h 62% cap 15:40` | payload `rate_limits.five_hour` |
 
 ## Design notes
 
@@ -62,13 +62,13 @@ By default Claude Code runs the statusline command on state change, never on a t
 
 ### Rate-limit pace
 
-Each window has a known length, so `resets_at` fixes its start and the fraction already elapsed is arithmetic. Dividing used percent by that fraction projects where the window lands at reset if the average burn so far continues. Under 100% is headroom. At or over 100% the segment warms and takes a `▲`, because the cap will arrive before the reset does.
+Each window has a known length, so `resets_at` fixes its start. The projection uses the **trailing rate**: every render records `(time, used%)` per window in one small state file shared across sessions (`pace.json` in the cache directory next to the dirty-check cache), and the rate is the slope over the last 40 minutes for the five-hour window or the last 24 hours for the weekly one (a full day, so sleep does not skew it). The projection is `used + rate x time to reset`. A burst early in the window stops counting once it leaves the trailing slice, and a burst after an idle stretch shows up within minutes instead of being diluted into the whole window's average. It is a two-point slope rather than a smoothed average because samples are irregular and `used_percentage` is a whole number.
 
-Two things follow from the definition, and both matter when reading the number. The projection is a **cumulative average**, so it has no memory of shape: a window where you burned 40% in twenty minutes and one where you dripped 40% across three hours project identically. And `used_percentage` is the server's figure, from the claude.ai usage endpoint, so the unit is percent of quota rather than tokens — already weighted for model, cache, and everything else the server weighs, and counting your usage on other machines too.
+If the cap would arrive before the reset, the segment warms, takes a `▲`, and shows when: `▲ 5h 62% cap 15:40`, or `▲ 7d 80% cap Thu 14:00` when that is not today. Otherwise it shows the projected percent at reset, `5h 13%→32%`. Until the history spans 10 minutes (five-hour) or 24 hours (weekly), or whenever the state file cannot be read or written, it falls back to the old cumulative figure: used percent divided by the fraction of the window elapsed, suppressed below 5% elapsed. A window that is absent from the payload (some accounts have no five-hour window) is simply skipped and records nothing. The history for a window is cleared when its `resets_at` changes or used percent drops.
 
-Freezing is safe here, which is why the projection is allowed on the line at all. While a session sits idle, elapsed grows and used does not, so the true projection only ever falls. A stale reading overstates the burn and can never invite spend the window cannot cover.
+`used_percentage` is the server's figure, from the claude.ai usage endpoint, so the unit is percent of quota rather than tokens, already weighted for model and cache, and counting your usage on other machines too.
 
-The projection is suppressed below 5% elapsed, where used-over-elapsed is dominated by whatever landed in the first few minutes, and whenever `resets_at` is missing or already past. Those cases fall back to bare usage.
+Freezing is safe here. The cap time is an absolute clock time, computed once. While a session sits idle the true rate only falls, so the true cap moves later and a stale `cap 15:40` is earlier than the truth: it overstates the burn and never invites spend the window cannot cover.
 
 Each window renders as its own segment so that it can carry its own colour. A hot five-hour window should not repaint a healthy weekly one.
 
