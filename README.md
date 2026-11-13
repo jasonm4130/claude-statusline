@@ -46,9 +46,9 @@ Each segment disappears when its data is absent, and the alternating backgrounds
 |---|---|---|
 | directory | `claude-statusline` | payload `workspace.current_dir`, then `cwd`, then `$PWD` on a parse failure |
 | git | `main*` | `.git/HEAD` read directly; `*` from `git status --porcelain` |
-| model | `opus·high`, or `⤷ explore·sonnet·med +adv opus` while a subagent works | payload `model` and `effort`, or the transcript when a subagent wrote the last turn |
+| model | `opus·high`, `opus·high ⚡` in fast mode, or `⤷ explore·sonnet·med +adv opus` while a subagent works | payload `model`, `effort` and `fast_mode`, or the transcript when a subagent wrote the last turn |
 | context | `132k/400k 33%` | payload `context_window` against the auto-compact window |
-| cache | `cache→22:56` | prompt-cache expiry, parsed from the transcript |
+| cache | `cache→22:56`, `cache cold · 66k recache`, `cache→22:56 ✗2` | payload `prompt_cache`, else prompt-cache expiry parsed from the transcript |
 | weekly limit | `7d 23%→29% Sun` | payload `rate_limits.seven_day` |
 | session limit | `5h 13%→32%` | payload `rate_limits.five_hour` |
 
@@ -82,7 +82,11 @@ Parallel agents are the one gap. The newest record wins, so a fan-out of four na
 
 The cache segment shows an absolute clock time rather than a countdown. A countdown, or a warm/expired badge, freezes mid-session and quietly becomes a lie — exactly when a quiet session is when you want to know. `cache→22:56` is still true at 23:30, because the arithmetic happened once and does not decay. The one claim safe to render is the negative one, so once the clock has passed, the segment reads `cache cold` and stays honest: expiry only moves forward when a new request lands, and a new request re-renders.
 
-Both inputs come from the `transcript_path` the payload already supplies. The timestamp is the newest request's, since a cache read refreshes the entry's TTL. The tier is the newest request that actually wrote a cache entry, read from `message.usage.cache_creation` — `ephemeral_1h_input_tokens` against `ephemeral_5m_input_tokens` — so the TTL is measured, never assumed. Only the last 512 KB of the transcript is read, from the end, with the partial first line dropped.
+Claude Code 2.1.323 and later send a `prompt_cache` object in the payload, and the segment prefers it: `expires_at` is the clock, with no inference. The `warm` flag is deliberately ignored, since it is as stale as any other frozen render; the segment is cold when `expires_at` is at or before the time of rendering. A cold segment appends the cost of resuming, `recache_tokens_if_cold`, as `cache cold · 66k recache`. The transcript path below remains the fallback when `prompt_cache` is absent, `caching_observed` is false, or `expires_at` is missing.
+
+`misses` counts misses Claude Code did not plan for; planned rebuilds go to `expected_rebuilds` and are never shown (a live payload with one expected rebuild and zero misses suggests the two are disjoint). Any `misses > 0` appends `✗N`, plus `last_miss_cause` when it is eight characters or fewer, and warms the segment for 15 minutes after `last_miss_at` (or indefinitely when that time is unknown). After that the count stays but the amber fades. The count is cumulative, so it is still true when frozen.
+
+In the transcript fallback, both inputs come from the `transcript_path` the payload already supplies. The timestamp is the newest request's, since a cache read refreshes the entry's TTL. The tier is the newest request that actually wrote a cache entry, read from `message.usage.cache_creation` — `ephemeral_1h_input_tokens` against `ephemeral_5m_input_tokens` — so the TTL is measured, never assumed. Only the last 512 KB of the transcript is read, from the end, with the partial first line dropped.
 
 ### Latency
 

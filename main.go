@@ -43,7 +43,9 @@ type payload struct {
 		FiveHour *window `json:"five_hour"`
 		SevenDay *window `json:"seven_day"`
 	} `json:"rate_limits"`
-	TranscriptPath string `json:"transcript_path"`
+	TranscriptPath string       `json:"transcript_path"`
+	PromptCache    *promptCache `json:"prompt_cache"`
+	FastMode       bool         `json:"fast_mode"`
 }
 
 type window struct {
@@ -174,13 +176,13 @@ func build(p *payload) []segment {
 
 	last, haveLast := lastTurn(p.TranscriptPath, tail)
 	if s, ok := modelSegment(p, last, haveLast); ok {
-		segs = append(segs, s)
+		segs = append(segs, withFastMode(p, s))
 	}
 
 	if s, ok := contextSegment(p); ok {
 		segs = append(segs, s)
 	}
-	if s, ok := cacheSegment(tail, time.Now()); ok {
+	if s, ok := cacheSegmentFor(p, tail, time.Now()); ok {
 		segs = append(segs, s)
 	}
 	segs = append(segs, limitSegments(p, time.Now())...)
