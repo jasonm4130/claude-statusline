@@ -56,6 +56,19 @@ func TestPayloadCacheSegment(t *testing.T) {
 			t.Errorf("got %+v, want text %q", s, want)
 		}
 	})
+	t.Run("cause sent as an object", func(t *testing.T) {
+		p := pcPayload(t, `{"prompt_cache":{"caching_observed":true,"expires_at":1794577548,"misses":1,"last_miss_cause":{"causes":["tools"]},"miss_causes":{"tools":1}}}`)
+		s, _ := cacheSegmentFor(p, nil, exp.Add(-time.Minute))
+		if want := "cache→" + clock + " ✗1 tools"; s.text != want {
+			t.Errorf("got %q, want %q", s.text, want)
+		}
+	})
+	t.Run("unknown prompt_cache shape keeps the rest of the payload", func(t *testing.T) {
+		p := pcPayload(t, `{"model":{"display_name":"Opus"},"prompt_cache":{"expires_at":"soon","last_miss_cause":42}}`)
+		if p.PromptCache.usable() {
+			t.Errorf("drifted prompt_cache should be unusable, got %+v", p.PromptCache)
+		}
+	})
 	t.Run("long cause is dropped", func(t *testing.T) {
 		p := pcPayload(t, `{"prompt_cache":{"caching_observed":true,"expires_at":1794577548,"misses":1,"last_miss_cause":"system_prompt_changed"}}`)
 		s, _ := cacheSegmentFor(p, nil, exp.Add(-time.Minute))
