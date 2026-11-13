@@ -118,9 +118,8 @@ func trackPace(fiveHour, sevenDay *window, now time.Time) paceHist {
 			dirty = true
 		}
 		n := len(pw.Samples)
-		if n > 0 && w.UsedPercentage < pw.Samples[n-1].U {
-			// Stale reading: keep the history, record nothing.
-		} else if n == 0 || pw.Samples[n-1].U != w.UsedPercentage || now.Sub(time.Unix(pw.Samples[n-1].T, 0)) > paceHeartbeat {
+		stale := n > 0 && w.UsedPercentage < pw.Samples[n-1].U // keep history, record nothing
+		if !stale && (n == 0 || pw.Samples[n-1].U != w.UsedPercentage || now.Sub(time.Unix(pw.Samples[n-1].T, 0)) > paceHeartbeat) {
 			pw.Samples = append(pw.Samples, sample{now.Unix(), w.UsedPercentage})
 			dirty = true
 		}
