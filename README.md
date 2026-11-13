@@ -31,8 +31,10 @@ go install github.com/jasonm4130/claude-statusline@latest
 Point `~/.claude/settings.json` at the binary:
 
 ```json
-"statusLine": { "type": "command", "command": "~/.local/bin/claude-statusline" }
+"statusLine": { "type": "command", "command": "~/.local/bin/claude-statusline", "refreshInterval": 30 }
 ```
+
+`refreshInterval` (Claude Code 2.1.323 and later) re-runs the command every N seconds on top of the event-driven updates. It is optional; the line is built to stay true without it. 30 is a good value: it lets `cache cold` and the falling pace projections catch up during a quiet spell, and a render in a dirty repo costs about 2.5 ms once the dirty check is cached (see [Latency](#latency)).
 
 Segment separators use the powerline glyph U+E0BC, so the terminal needs a [Nerd Font](https://www.nerdfonts.com). Colours are 24-bit truecolor.
 
@@ -47,8 +49,8 @@ Each segment disappears when its data is absent, and the alternating backgrounds
 | Segment | Example | Source |
 |---|---|---|
 | directory | `claude-statusline` | payload `workspace.current_dir`, then `cwd`, then `$PWD` on a parse failure |
-| git | `main*` | `.git/HEAD` read directly; `*` from `git status --porcelain` |
-| model | `opus·high`, `opus·high ⚡` in fast mode, or `⤷ explore·sonnet·med +adv opus` while a subagent works | payload `model`, `effort` and `fast_mode`, or the transcript when a subagent wrote the last turn |
+| git | `main*` | `.git/HEAD` read directly; `*` from `git status --porcelain`, cached briefly per repo |
+| model | `opus·high`, `opus·high ⚡` in fast mode, or `⤷ explore·sonnet·med +adv opus` while a subagent works, with `(3 agents)` after a fan-out | payload `model`, `effort` and `fast_mode`, or the transcript when a subagent wrote the last turn |
 | context | `132k/400k 33%` | payload `context_window` against the auto-compact window |
 | cache | `cache→22:56`, `cache cold · 66k recache`, `cache→22:56 ✗2` | payload `prompt_cache`, else prompt-cache expiry parsed from the transcript |
 | weekly limit | `7d 23%→29% Sun` | payload `rate_limits.seven_day` |
@@ -56,7 +58,7 @@ Each segment disappears when its data is absent, and the alternating backgrounds
 
 ## Design notes
 
-Claude Code runs the statusline command on state change, never on a timer. Measured idle, it goes 60 seconds or more between invocations. Everything on the line therefore has to stay **true while frozen**, and that single constraint drives most of the decisions below.
+By default Claude Code runs the statusline command on state change, never on a timer. Measured idle, it goes 60 seconds or more between invocations. Since 2.1.323 a `refreshInterval` setting can add a timer, but it is opt-in, and the binary cannot tell from its input whether one is configured. Everything on the line therefore still has to stay **true while frozen**, and that single constraint drives most of the decisions below. A timer only shortens how long a render sits frozen; it never licenses a claim that would be false without one.
 
 ### Rate-limit pace
 
@@ -78,7 +80,7 @@ That claim is about the past, so it survives a frozen render. A live "a subagent
 
 The advisor model rides in the same segment, and only when it differs from the model that wrote the last turn. Advisor and session model are usually the same, so a permanent label would repeat one word all day. The case worth seeing is the mismatch: a sonnet subagent advised by opus.
 
-Parallel agents are the one gap. The newest record wins, so a fan-out of four names whichever of them wrote last.
+Parallel agents get a count. The newest record still names the label, so a fan-out of four names whichever of them wrote last, and `(4 agents)` follows it: the number of subagent transcripts written since the main agent's own last turn. That window is chosen to keep the claim about the past. It cannot become false while frozen, only incomplete, and it needs no clock: sequential agents always have a main-agent turn between them, so only agents working alongside each other share it. The count appears only on a subagent label and only above one.
 
 ### Prompt-cache expiry
 
@@ -93,6 +95,8 @@ In the transcript fallback, both inputs come from the `transcript_path` the payl
 ### Latency
 
 Nothing on the line is allowed to make the prompt wait. The git branch comes from reading `.git/HEAD` directly rather than shelling out. The dirty marker is the one subprocess, and it runs under a 150 ms timeout and is dropped rather than waited on. It passes `--no-optional-locks`, so it never rewrites the index or holds `.git/index.lock` against git commands running in the same repo.
+
+The dirty answer is cached per repo in a small file under the user cache directory (`~/Library/Caches/claude-statusline` on macOS, `~/.cache/claude-statusline` on Linux), keyed on the git dir and the size and modification time of `.git/index`, `HEAD` and the HEAD reflog. Staging, committing, checking out, resetting and stashing all move that fingerprint, so they show on the next render. A plain edit to a tracked file does not, so the cached answer also expires: a clean answer after 5 seconds, a dirty one after 2 minutes, because clean-to-dirty is exactly the edit the fingerprint misses while dirty-to-clean almost always goes through git. Any failure, and any git timeout, falls back to running git, and a timeout is never cached. Measured with `hyperfine` on an M5 in a dirty repo, a render dropped from 12.7 ms to 2.5 ms; in a clean repo, from 13.7 ms to 2.4 ms on a cache hit, with a miss costing the same as before. On a 30-second timer a dirty repo skips git on three ticks in four, at the cost of an edit undone by hand keeping its `*` for up to 2 minutes; a clean repo still runs git on every tick.
 
 Two file reads land on the same path. The main transcript is read once and serves both the cache clock and the agent label. The freshest subagent file is read only when its modification time beats the main agent's last turn. Both reads are capped at 512 KB taken from the end of the file. Measured against a session holding 100 subagent files of 560 KB each, the whole lookup costs 0.28 ms on an M5.
 
