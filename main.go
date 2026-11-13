@@ -118,6 +118,7 @@ func render() string {
 	if err != nil {
 		return fallback()
 	}
+	saveSnapshot(data)
 	var p payload
 	if err := json.Unmarshal(data, &p); err != nil {
 		return fallback()
@@ -348,8 +349,8 @@ func agentLabel(name string) string {
 // The case worth seeing is the mismatch: a sonnet subagent advised by opus.
 func modelSegment(p *payload, t turn, haveTurn bool) (segment, bool) {
 	family, effort := "", p.Effort.Level
-	if p.Model.DisplayName != "" {
-		family = strings.ToLower(strings.Fields(p.Model.DisplayName)[0])
+	if f := strings.Fields(p.Model.DisplayName); len(f) > 0 {
+		family = strings.ToLower(f[0])
 	}
 	name := family
 	if haveTurn && t.agent != "" {
@@ -381,7 +382,7 @@ func gitBranch(dir string) (string, bool) {
 	}
 	head := strings.TrimSpace(string(b))
 	if ref, found := strings.CutPrefix(head, "ref: "); found {
-		return filepath.Base(ref), true
+		return strings.TrimPrefix(ref, "refs/heads/"), true
 	}
 	if len(head) >= 7 {
 		return head[:7], true
