@@ -158,15 +158,15 @@ func build(p *payload) []segment {
 		dir = p.CWD
 	}
 	if dir != "" {
-		segs = append(segs, segment{dirLabel(dir), idDir, txtDir, stateNormal})
+		segs = append(segs, segment{iconDir + dirLabel(dir), idDir, txtDir, stateNormal})
 	}
 
 	if dir != "" {
 		if b, ok := gitBranch(dir); ok {
 			if cachedGitDirty(dir) {
-				b += "*"
+				b += dirtyMark
 			}
-			segs = append(segs, segment{b, idGit, idGit, stateNormal})
+			segs = append(segs, segment{iconBranch + b, idGit, idGit, stateNormal})
 		}
 	}
 
@@ -348,10 +348,8 @@ func agentLabel(name string) string {
 	return string(r[:agentNameMax]) + "…"
 }
 
-// modelSegment names the model that produced the last turn, and the advisor
-// model alongside it when the two differ. Advisor and main model are usually
-// the same, so an always-on advisor label would repeat the same word all day.
-// The case worth seeing is the mismatch: a sonnet subagent advised by opus.
+// modelSegment names the model that produced the last turn. The advisor model
+// is left off: it is set once per session, so it would repeat all day.
 func modelSegment(p *payload, t turn, haveTurn bool) (segment, bool) {
 	family, effort := "", p.Effort.Level
 	if f := strings.Fields(p.Model.DisplayName); len(f) > 0 {
@@ -369,10 +367,7 @@ func modelSegment(p *payload, t turn, haveTurn bool) (segment, bool) {
 	if e := effortAbbrev(effort); e != "" {
 		name += "·" + e
 	}
-	if haveTurn && t.advisor != "" && shortModel(t.advisor) != family {
-		name += " +adv " + shortModel(t.advisor)
-	}
-	return segment{name, idModel, idModel, stateNormal}, true
+	return segment{iconModel + name, idModel, idModel, stateNormal}, true
 }
 
 // gitBranch resolves the current branch by reading .git/HEAD directly.
@@ -460,7 +455,7 @@ func contextSegment(p *payload) (segment, bool) {
 		return segment{}, false
 	}
 	pct := float64(used) / float64(target) * 100
-	text := fmt.Sprintf("%dk/%dk %d%%", roundK(used), roundK(target), int(math.Round(pct)))
+	text := fmt.Sprintf("%s%d%%", iconContext, int(math.Round(pct)))
 	fg, st := threshold(pct, idCtx)
 	return segment{text, idCtx, fg, st}, true
 }
@@ -616,9 +611,9 @@ func cacheSegment(tail []byte, now time.Time) (segment, bool) {
 	}
 	expiry := e.at.Add(e.ttl)
 	if !now.Before(expiry) {
-		return segment{"cache cold", idCache, fgWarm, stateWarming}, true
+		return segment{iconCache + "cold", idCache, fgWarm, stateWarming}, true
 	}
-	return segment{"cache→" + expiry.Local().Format("15:04"), idCache, idCache, stateNormal}, true
+	return segment{iconCache + expiry.Local().Format("15:04"), idCache, idCache, stateNormal}, true
 }
 
 // Pace.
@@ -664,12 +659,8 @@ func limitSegmentsWith(p *payload, now time.Time, hist paceHist) []segment {
 	if rl == nil {
 		return nil
 	}
-	day := ""
-	if rl.SevenDay != nil && rl.SevenDay.ResetsAt > 0 {
-		day = time.Unix(rl.SevenDay.ResetsAt, 0).Local().Format("Mon")
-	}
 	var segs []segment
-	if s, ok := limitWindow("7d", rl.SevenDay, sevenDayLen, day, now, hist["7d"]); ok {
+	if s, ok := limitWindow("7d", rl.SevenDay, sevenDayLen, "", now, hist["7d"]); ok {
 		segs = append(segs, s)
 	}
 	if s, ok := limitWindow("5h", rl.FiveHour, fiveHourLen, "", now, hist["5h"]); ok {
@@ -689,8 +680,11 @@ func limitWindow(label string, w *window, length time.Duration, suffix string, n
 		return segment{}, false
 	}
 	st := stateOf(w.UsedPercentage)
-	text := fmt.Sprintf("%s %d%%", label, int(math.Round(w.UsedPercentage)))
+	text := fmt.Sprintf("%s%d", limitIcon(label), int(math.Round(w.UsedPercentage)))
 	if pt, over, ok := paceText(label, w, hist, now); ok {
+		if strings.HasPrefix(pt, " cap") {
+			text += "%"
+		}
 		text += pt
 		if over {
 			text = overPace + text
@@ -701,7 +695,9 @@ func limitWindow(label string, w *window, length time.Duration, suffix string, n
 		if strings.Contains(pt, "cap") {
 			suffix = "" // the cap day is the news; the reset day would muddy it
 		}
-	} else if proj, ok := projected(w, length, now); ok {
+	} else if proj, ok := projected(w, length, now); !ok {
+		text += "%"
+	} else {
 		text += fmt.Sprintf("\u2192%d%%", int(math.Round(proj)))
 		if proj >= 100 {
 			text = overPace + text

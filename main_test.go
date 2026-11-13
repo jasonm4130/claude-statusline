@@ -163,7 +163,7 @@ func TestCacheSegment(t *testing.T) {
 		if !ok {
 			t.Fatal("segment absent")
 		}
-		want := "cache→" + expiry.Local().Format("15:04")
+		want := iconCache + expiry.Local().Format("15:04")
 		if s.text != want {
 			t.Errorf("text = %q, want %q", s.text, want)
 		}
@@ -177,8 +177,8 @@ func TestCacheSegment(t *testing.T) {
 		if !ok {
 			t.Fatal("segment absent")
 		}
-		if s.text != "cache cold" {
-			t.Errorf("text = %q, want %q", s.text, "cache cold")
+		if s.text != iconCache+"cold" {
+			t.Errorf("text = %q, want %q", s.text, iconCache+"cold")
 		}
 		if s.state != stateWarming {
 			t.Errorf("state = %v, want stateWarming", s.state)
@@ -190,8 +190,8 @@ func TestCacheSegment(t *testing.T) {
 		if !ok {
 			t.Fatal("segment absent")
 		}
-		if s.text != "cache cold" {
-			t.Errorf("text = %q, want %q", s.text, "cache cold")
+		if s.text != iconCache+"cold" {
+			t.Errorf("text = %q, want %q", s.text, iconCache+"cold")
 		}
 	})
 
@@ -269,7 +269,7 @@ func TestLimitSegments(t *testing.T) {
 
 	t.Run("one segment per window, weekly first", func(t *testing.T) {
 		segs := limitSegments(mk(&window{13, 1787923200}, &window{23, 1788033600}), now)
-		want := []string{"7d 23%→29% Sun", "5h 13%→32%"}
+		want := []string{icon7d + "23→29%", icon5h + "13→32%"}
 		if got := texts(segs); !slices.Equal(got, want) {
 			t.Errorf("texts = %q, want %q", got, want)
 		}
@@ -314,7 +314,7 @@ func TestLimitSegments(t *testing.T) {
 
 	t.Run("no reset time falls back to bare usage", func(t *testing.T) {
 		segs := limitSegments(mk(&window{13, 0}, nil), now)
-		if got := texts(segs); !slices.Equal(got, []string{"5h 13%"}) {
+		if got := texts(segs); !slices.Equal(got, []string{icon5h + "13%"}) {
 			t.Errorf("texts = %q", got)
 		}
 	})
@@ -415,34 +415,34 @@ func TestModelSegment(t *testing.T) {
 	}{
 		{
 			name: "main agent falls back to the payload",
-			p:    mk("Opus 5", "high"), want: "opus·high", wantOK: true,
+			p:    mk("Opus 5", "high"), want: iconModel + "opus·high", wantOK: true,
 		},
 		{
 			name:     "advisor stays hidden when it matches the working model",
 			p:        mk("Opus 5", "high"),
 			t:        turn{at: at, model: "claude-opus-5", effort: "high", advisor: "claude-opus-5"},
-			haveTurn: true, want: "opus·high", wantOK: true,
+			haveTurn: true, want: iconModel + "opus·high", wantOK: true,
 		},
 		{
 			name: "a subagent turn names the agent and its own model",
 			p:    mk("Opus 5", "high"),
 			t: turn{at: at, agent: "Explore", model: "claude-sonnet-5", effort: "medium",
 				advisor: "claude-opus-5"},
-			haveTurn: true, want: "⤷ explore·sonnet·med +adv opus", wantOK: true,
+			haveTurn: true, want: iconModel + "⤷ explore·sonnet·med", wantOK: true,
 		},
 		{
 			name: "a subagent on the session model shows no advisor",
 			p:    mk("Opus 5", "high"),
 			t: turn{at: at, agent: "workhorse", model: "claude-opus-5", effort: "max",
 				advisor: "claude-opus-5"},
-			haveTurn: true, want: "⤷ workhorse·opus·max", wantOK: true,
+			haveTurn: true, want: iconModel + "⤷ workhorse·opus·max", wantOK: true,
 		},
 		{
 			name: "a long agent name is bounded",
 			p:    mk("Opus 5", "high"),
 			t: turn{at: at, agent: "verify:app/services/letters/send.rb", model: "claude-sonnet-5",
 				effort: "low", advisor: "claude-sonnet-5"},
-			haveTurn: true, want: "⤷ verify:app/s…·sonnet·low", wantOK: true,
+			haveTurn: true, want: iconModel + "⤷ verify:app/s…·sonnet·low", wantOK: true,
 		},
 		{
 			name: "no model anywhere yields no segment",

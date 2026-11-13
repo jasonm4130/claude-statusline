@@ -60,7 +60,7 @@ func TestPaceEarlyBurstThenIdle(t *testing.T) {
 		step(t, time.Duration(m)*time.Minute, w5(40), nil)
 	}
 	got := step(t, 105*time.Minute, w5(40), nil)
-	if got != "5h 40%→40%" {
+	if got != icon5h+"40→40%" {
 		t.Errorf("got %q", got)
 	}
 	// the cumulative figure would have been 40/0.35 = 114%
@@ -77,7 +77,7 @@ func TestPaceIdleThenLateBurst(t *testing.T) {
 	step(t, 185*time.Minute, w5(20), nil)
 	step(t, 195*time.Minute, w5(35), nil)
 	got := step(t, 200*time.Minute, w5(42), nil)
-	if !strings.HasPrefix(got, "▲ 5h 42% cap ") {
+	if !strings.HasPrefix(got, "▲ "+icon5h+"42% cap ") {
 		t.Fatalf("expected cap warning, got %q", got)
 	}
 	// cumulative projection would say 42/(200/300)=63%: no warning
@@ -94,7 +94,7 @@ func TestPaceAbsentFiveHour(t *testing.T) {
 	d := paceEnv(t)
 	sd := &window{20, paceT0.Add(48 * time.Hour).Unix()}
 	got := step(t, 0, nil, sd)
-	if !strings.HasPrefix(got, "7d 20%") {
+	if !strings.HasPrefix(got, icon7d+"20→") {
 		t.Errorf("got %q", got)
 	}
 	b, err := os.ReadFile(filepath.Join(d, paceStateFile))
@@ -155,7 +155,7 @@ func TestPaceFallbackBeforeEnoughHistory(t *testing.T) {
 	step(t, 60*time.Minute, w5(20), nil)
 	got := step(t, 65*time.Minute, w5(25), nil) // 5 min of history < 10
 	// cumulative: elapsed 65/300, 25/0.2167 = 115% -> arrow form with glyph
-	if got != "▲ 5h 25%→115%" {
+	if got != "▲ "+icon5h+"25→115%" {
 		t.Errorf("got %q", got)
 	}
 }
@@ -171,7 +171,7 @@ func TestPaceSevenDayNeeds24h(t *testing.T) {
 	}
 	// 25h later the anchor exists; 10 points/day, 5 days left: ~70%, no cap.
 	got = step(t, 25*time.Hour, nil, mk(21))
-	if got != "7d 21%→"+"68%"+" "+time.Unix(reset, 0).Local().Format("Mon") && !strings.HasPrefix(got, "7d 21%→") {
+	if !strings.HasPrefix(got, icon7d+"21→") {
 		t.Errorf("got %q", got)
 	}
 }
@@ -183,7 +183,7 @@ func TestPaceCapBeforeResetShowsClock(t *testing.T) {
 	step(t, 70*time.Minute, w5(45), nil)
 	got := step(t, 80*time.Minute, w5(50), nil)
 	// rate from the oldest in-window sample (60 min): 10 pts / 20 min
-	want := "▲ 5h 50% cap " + paceT0.Add(180*time.Minute).Format("15:04")
+	want := "▲ " + icon5h + "50% cap " + paceT0.Add(180*time.Minute).Format("15:04")
 	if got != want {
 		t.Errorf("got %q want %q", got, want)
 	}
@@ -205,7 +205,7 @@ func TestPaceCorruptStateFallsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := step(t, 60*time.Minute, w5(15), nil)
-	if !strings.HasPrefix(got, "5h 15%→75%") {
+	if !strings.HasPrefix(got, icon5h+"15→75%") {
 		t.Errorf("got %q", got)
 	}
 	// and the file heals
@@ -223,7 +223,7 @@ func TestPaceUnwritableStateFallsBack(t *testing.T) {
 	dirtyCacheDir = func() (string, error) { return filepath.Join(f, "sub"), nil }
 	t.Cleanup(func() { dirtyCacheDir = old })
 	got := step(t, 60*time.Minute, w5(15), nil)
-	if !strings.HasPrefix(got, "5h 15%→75%") {
+	if !strings.HasPrefix(got, icon5h+"15→75%") {
 		t.Errorf("got %q", got)
 	}
 }

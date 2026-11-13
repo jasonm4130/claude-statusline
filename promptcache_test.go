@@ -23,27 +23,27 @@ func TestPayloadCacheSegment(t *testing.T) {
 
 	t.Run("warm shows the absolute clock", func(t *testing.T) {
 		s, ok := cacheSegmentFor(pcPayload(t, base), nil, exp.Add(-time.Minute))
-		if !ok || s.text != "cache→"+clock || s.state != stateNormal {
+		if !ok || s.text != iconCache+clock || s.state != stateNormal {
 			t.Errorf("got %+v ok=%v", s, ok)
 		}
 	})
 	t.Run("warm flag is ignored once expires_at has passed", func(t *testing.T) {
 		s, _ := cacheSegmentFor(pcPayload(t, base), nil, exp)
-		if s.text != "cache cold · 66k recache" || s.state != stateWarming {
+		if s.text != iconCache+"cold · 66k" || s.state != stateWarming {
 			t.Errorf("got %+v", s)
 		}
 	})
 	t.Run("cold without recache cost", func(t *testing.T) {
 		p := pcPayload(t, `{"prompt_cache":{"warm":true,"caching_observed":true,"expires_at":1794577548,"recache_tokens_if_cold":0}}`)
 		s, _ := cacheSegmentFor(p, nil, exp.Add(time.Hour))
-		if s.text != "cache cold" {
+		if s.text != iconCache+"cold" {
 			t.Errorf("got %q", s.text)
 		}
 	})
 	t.Run("expected rebuilds alone are silent", func(t *testing.T) {
 		p := pcPayload(t, `{"prompt_cache":{"caching_observed":true,"expires_at":1794577548,"misses":0,"expected_rebuilds":3}}`)
 		s, _ := cacheSegmentFor(p, nil, exp.Add(-time.Minute))
-		if s.state != stateNormal || s.text != "cache→"+clock {
+		if s.state != stateNormal || s.text != iconCache+clock {
 			t.Errorf("got %+v", s)
 		}
 	})
@@ -52,14 +52,14 @@ func TestPayloadCacheSegment(t *testing.T) {
 		raw := `{"prompt_cache":{"caching_observed":true,"expires_at":1794577548,"misses":2,"last_miss_at":` +
 			strconv.FormatInt(now.Add(-2*time.Minute).Unix(), 10) + `,"last_miss_cause":"tools"}}`
 		s, _ := cacheSegmentFor(pcPayload(t, raw), nil, now)
-		if want := "cache→" + clock + " ✗2 tools"; s.text != want || s.state != stateWarming {
+		if want := iconCache + clock + " ✗2 tools"; s.text != want || s.state != stateWarming {
 			t.Errorf("got %+v, want text %q", s, want)
 		}
 	})
 	t.Run("cause sent as an object", func(t *testing.T) {
 		p := pcPayload(t, `{"prompt_cache":{"caching_observed":true,"expires_at":1794577548,"misses":1,"last_miss_cause":{"causes":["tools"]},"miss_causes":{"tools":1}}}`)
 		s, _ := cacheSegmentFor(p, nil, exp.Add(-time.Minute))
-		if want := "cache→" + clock + " ✗1 tools"; s.text != want {
+		if want := iconCache + clock + " ✗1 tools"; s.text != want {
 			t.Errorf("got %q, want %q", s.text, want)
 		}
 	})
@@ -72,7 +72,7 @@ func TestPayloadCacheSegment(t *testing.T) {
 	t.Run("long cause is dropped", func(t *testing.T) {
 		p := pcPayload(t, `{"prompt_cache":{"caching_observed":true,"expires_at":1794577548,"misses":1,"last_miss_cause":"system_prompt_changed"}}`)
 		s, _ := cacheSegmentFor(p, nil, exp.Add(-time.Minute))
-		if want := "cache→" + clock + " ✗1"; s.text != want {
+		if want := iconCache + clock + " ✗1"; s.text != want {
 			t.Errorf("got %q, want %q", s.text, want)
 		}
 	})
@@ -81,7 +81,7 @@ func TestPayloadCacheSegment(t *testing.T) {
 		raw := `{"prompt_cache":{"caching_observed":true,"expires_at":1794577548,"misses":1,"last_miss_at":` +
 			strconv.FormatInt(now.Add(-time.Hour).Unix(), 10) + `}}`
 		s, _ := cacheSegmentFor(pcPayload(t, raw), nil, now)
-		if s.state != stateNormal || s.text != "cache→"+clock+" ✗1" {
+		if s.state != stateNormal || s.text != iconCache+clock+" ✗1" {
 			t.Errorf("got %+v", s)
 		}
 	})
@@ -94,7 +94,7 @@ func TestPayloadCacheSegment(t *testing.T) {
 			`{"prompt_cache":{"caching_observed":true}}`,
 		} {
 			s, ok := cacheSegmentFor(pcPayload(t, raw), tail, at.Add(time.Minute))
-			if !ok || s.text != "cache→"+at.Add(time.Hour).Local().Format("15:04") {
+			if !ok || s.text != iconCache+at.Add(time.Hour).Local().Format("15:04") {
 				t.Errorf("%s: got %+v ok=%v", raw, s, ok)
 			}
 		}
@@ -107,11 +107,11 @@ func TestPayloadCacheSegment(t *testing.T) {
 func TestFastModeMarker(t *testing.T) {
 	p := pcPayload(t, `{"model":{"display_name":"Opus 5"},"effort":{"level":"high"},"fast_mode":true}`)
 	s, _ := modelSegment(p, turn{}, false)
-	if got := withFastMode(p, s).text; got != "opus·high ⚡" {
+	if got := withFastMode(p, s).text; got != iconModel+"opus·high ⚡" {
 		t.Errorf("fast on: %q", got)
 	}
 	p.FastMode = false
-	if got := withFastMode(p, s).text; got != "opus·high" {
+	if got := withFastMode(p, s).text; got != iconModel+"opus·high" {
 		t.Errorf("fast off: %q", got)
 	}
 }
