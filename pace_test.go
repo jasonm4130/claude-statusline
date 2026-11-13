@@ -124,13 +124,29 @@ func TestPaceResetClearsHistory(t *testing.T) {
 	}
 }
 
-func TestPaceUsedDropClearsHistory(t *testing.T) {
+func TestPaceStaleLowerReadingKeepsHistory(t *testing.T) {
+	// An idle session re-rendering on a timer reports an older, lower used%.
 	paceEnv(t)
 	step(t, 0, w5(10), nil)
 	step(t, 30*time.Minute, w5(30), nil)
 	h := trackPace(w5(12), nil, paceT0.Add(31*time.Minute))
-	if n := len(h["5h"]); n != 1 || h["5h"][0].U != 12 {
-		t.Errorf("history not cleared: %+v", h["5h"])
+	if n := len(h["5h"]); n != 2 || h["5h"][1].U != 30 {
+		t.Errorf("stale reading changed history: %+v", h["5h"])
+	}
+}
+
+func TestPaceStaleOlderWindowIgnored(t *testing.T) {
+	// After a reset, an idle session still carries the previous resets_at.
+	paceEnv(t)
+	nw := &window{5, paceT0.Add(10 * time.Hour).Unix()}
+	step(t, 0, nw, nil)
+	h := trackPace(w5(40), nil, paceT0.Add(time.Minute))
+	if _, ok := h["5h"]; ok {
+		t.Errorf("older window produced history: %+v", h["5h"])
+	}
+	h = trackPace(nw, nil, paceT0.Add(2*time.Minute))
+	if n := len(h["5h"]); n != 1 || h["5h"][0].U != 5 {
+		t.Errorf("newer window history lost: %+v", h["5h"])
 	}
 }
 

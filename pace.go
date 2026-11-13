@@ -102,13 +102,25 @@ func trackPace(fiveHour, sevenDay *window, now time.Time) paceHist {
 			continue
 		}
 		pw := st[label]
-		if pw == nil || pw.Reset != w.ResetsAt || (len(pw.Samples) > 0 && w.UsedPercentage < pw.Samples[len(pw.Samples)-1].U) {
+		// Every session shares this file, but each payload carries the limits
+		// from that session's own last API response. With refreshInterval set,
+		// an idle session keeps re-rendering an older reading: a lower used% in
+		// the same window, or the previous window's resets_at after a reset.
+		// Used% never falls within a window and windows only move forward, so
+		// both are stale, not news. They are left out of the history rather
+		// than clearing it, or concurrent sessions would wipe it on every tick.
+		if pw != nil && w.ResetsAt < pw.Reset {
+			continue
+		}
+		if pw == nil || pw.Reset != w.ResetsAt {
 			pw = &paceWindow{Reset: w.ResetsAt}
 			st[label] = pw
 			dirty = true
 		}
 		n := len(pw.Samples)
-		if n == 0 || pw.Samples[n-1].U != w.UsedPercentage || now.Sub(time.Unix(pw.Samples[n-1].T, 0)) > paceHeartbeat {
+		if n > 0 && w.UsedPercentage < pw.Samples[n-1].U {
+			// Stale reading: keep the history, record nothing.
+		} else if n == 0 || pw.Samples[n-1].U != w.UsedPercentage || now.Sub(time.Unix(pw.Samples[n-1].T, 0)) > paceHeartbeat {
 			pw.Samples = append(pw.Samples, sample{now.Unix(), w.UsedPercentage})
 			dirty = true
 		}
@@ -219,13 +231,17 @@ func trailingProjection(label string, w *window, hist []sample, now time.Time) (
 	if left <= 0 {
 		return 0, time.Time{}, false, false
 	}
-	rate, ok := trailingRate(label, hist, w.UsedPercentage, now)
+	used := w.UsedPercentage
+	if n := len(hist); n > 0 && hist[n-1].U > used {
+		used = hist[n-1].U // another session has seen a newer reading
+	}
+	rate, ok := trailingRate(label, hist, used, now)
 	if !ok {
 		return 0, time.Time{}, false, false
 	}
-	proj = math.Min(w.UsedPercentage+rate*left.Seconds(), 999)
+	proj = math.Min(used+rate*left.Seconds(), 999)
 	if proj >= 100 && rate > 0 {
-		secs := (100 - w.UsedPercentage) / rate
+		secs := (100 - used) / rate
 		capAt = now.Add(time.Duration(secs * float64(time.Second)))
 		if capAt.Before(reset) {
 			return proj, capAt, true, true
