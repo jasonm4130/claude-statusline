@@ -163,7 +163,7 @@ func build(p *payload) []segment {
 
 	if dir != "" {
 		if b, ok := gitBranch(dir); ok {
-			if gitDirty(dir) {
+			if cachedGitDirty(dir) {
 				b += "*"
 			}
 			segs = append(segs, segment{b, idGit, idGit, stateNormal})
@@ -177,7 +177,7 @@ func build(p *payload) []segment {
 
 	last, haveLast := lastTurn(p.TranscriptPath, tail)
 	if s, ok := modelSegment(p, last, haveLast); ok {
-		segs = append(segs, withFastMode(p, s))
+		segs = append(segs, withFastMode(p, withAgentCount(s, last, haveLast)))
 	}
 
 	if s, ok := contextSegment(p); ok {
@@ -221,14 +221,15 @@ func effortAbbrev(level string) string {
 // outlive the agent. When the subagent finishes the main agent speaks again,
 // which re-renders, and the segment flips back on its own.
 //
-// Parallel agents are one stated gap. The newest record wins, so a fan-out of
-// four names whichever of them wrote last, not all four.
+// Parallel agents: the newest record wins, so a fan-out of four names
+// whichever of them wrote last; agents.go appends how many there were.
 type turn struct {
 	at      time.Time
 	agent   string // attributionAgent; empty for the main agent
 	model   string // model ID, for example "claude-sonnet-5"
 	effort  string
 	advisor string // advisorModel: the model behind the advisor tool
+	agents  int    // subagent files written since the main agent's last turn; see agents.go
 }
 
 // parseLastTurn scans transcript lines newest-first for the last assistant
@@ -260,7 +261,7 @@ func parseLastTurn(tail []byte) (turn, bool) {
 		if err != nil {
 			continue
 		}
-		return turn{at, rec.AttributionAgent, rec.Message.Model, rec.Effort, rec.AdvisorModel}, true
+		return turn{at: at, agent: rec.AttributionAgent, model: rec.Message.Model, effort: rec.Effort, advisor: rec.AdvisorModel}, true
 	}
 	return turn{}, false
 }
@@ -276,13 +277,16 @@ func subagentTurn(transcript string, after time.Time) (turn, bool) {
 	nested, _ := filepath.Glob(filepath.Join(root, "workflows", "*", "agent-*.jsonl"))
 	paths = append(paths, nested...)
 
-	newest, newestAt := "", after
+	newest, newestAt, agents := "", after, 0
 	for _, path := range paths {
 		fi, err := os.Stat(path)
-		if err != nil || !fi.ModTime().After(newestAt) {
+		if err != nil || !fi.ModTime().After(after) {
 			continue
 		}
-		newest, newestAt = path, fi.ModTime()
+		agents++
+		if fi.ModTime().After(newestAt) {
+			newest, newestAt = path, fi.ModTime()
+		}
 	}
 	if newest == "" {
 		return turn{}, false
@@ -295,6 +299,7 @@ func subagentTurn(transcript string, after time.Time) (turn, bool) {
 	if !ok || t.agent == "" || !t.at.After(after) {
 		return turn{}, false
 	}
+	t.agents = agents
 	return t, true
 }
 
@@ -421,14 +426,21 @@ func findGitDir(dir string) (string, bool) {
 }
 
 func gitDirty(dir string) bool {
+	dirty, _ := gitStatusDirty(dir)
+	return dirty
+}
+
+// gitStatusDirty reports ok=false when git failed or timed out, so a caller
+// that caches the answer never caches a guess.
+func gitStatusDirty(dir string) (dirty, ok bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", "--no-optional-locks", "-C", dir, "status", "--porcelain", "--untracked-files=no")
 	out, err := cmd.Output()
 	if err != nil {
-		return false
+		return false, false
 	}
-	return len(strings.TrimSpace(string(out))) > 0
+	return len(strings.TrimSpace(string(out))) > 0, true
 }
 
 func contextSegment(p *payload) (segment, bool) {
