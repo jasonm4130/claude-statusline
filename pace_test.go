@@ -114,9 +114,10 @@ func TestPaceAbsentFiveHour(t *testing.T) {
 
 func TestPaceResetCarriesHistory(t *testing.T) {
 	paceEnv(t)
-	step(t, 0, w5(10), nil)
-	step(t, 30*time.Minute, w5(30), nil)
-	nw := &window{5, paceT0.Add(10 * time.Hour).Unix()}
+	ow := func(u float64) *window { return &window{u, paceT0.Add(60 * time.Minute).Unix()} }
+	step(t, 0, ow(10), nil)
+	step(t, 30*time.Minute, ow(30), nil)
+	nw := &window{5, paceT0.Add(6 * time.Hour).Unix()}
 	step(t, 60*time.Minute, nw, nil)
 	h := trackPace(nw, nil, paceT0.Add(61*time.Minute))["5h"]
 	// the old window re-based to end at 0, then the new window's own reading
@@ -133,13 +134,27 @@ func TestPaceResetCarriesHistory(t *testing.T) {
 
 func TestPaceResetAfterIdleStartsFresh(t *testing.T) {
 	paceEnv(t)
-	step(t, 0, w5(10), nil)
-	step(t, 30*time.Minute, w5(30), nil)
+	ow := func(u float64) *window { return &window{u, paceT0.Add(60 * time.Minute).Unix()} }
+	step(t, 0, ow(10), nil)
+	step(t, 30*time.Minute, ow(30), nil)
 	// the old window's last reading is 90 minutes old, past the 40 minute trail
-	nw := &window{5, paceT0.Add(10 * time.Hour).Unix()}
+	nw := &window{5, paceT0.Add(7 * time.Hour).Unix()}
 	step(t, 120*time.Minute, nw, nil)
 	if h := trackPace(nw, nil, paceT0.Add(121*time.Minute))["5h"]; len(h) != 1 {
 		t.Errorf("want 1 sample after an idle reset, got %+v", h)
+	}
+}
+
+func TestPaceResetMovedEarlyStartsFresh(t *testing.T) {
+	// resets_at moves while the old window is still open: the usage was not
+	// zeroed, so carrying the history would count it twice.
+	paceEnv(t)
+	step(t, 0, w5(10), nil)
+	step(t, 30*time.Minute, w5(30), nil)
+	moved := &window{31, paceT0.Add(6 * time.Hour).Unix()}
+	step(t, 35*time.Minute, moved, nil)
+	if h := trackPace(moved, nil, paceT0.Add(36*time.Minute))["5h"]; len(h) != 1 {
+		t.Errorf("want 1 sample after a moved reset, got %+v", h)
 	}
 }
 
@@ -160,7 +175,7 @@ func TestPaceWeeklyResetKeepsTheRate(t *testing.T) {
 	// the new week the trailing rate already has a day of data behind it.
 	paceEnv(t)
 	old := &window{0, paceT0.Add(48 * time.Hour).Unix()}
-	for h := 0; h < 48; h++ {
+	for h := 0; h <= 47; h++ {
 		old.UsedPercentage = 50 + float64(h)*10/24
 		step(t, time.Duration(h)*time.Hour, nil, old)
 	}

@@ -243,7 +243,7 @@ func renderSVG(lines []svgLine) string {
 	h := float64(len(lines))*(svgCapH+svgRowH+svgGap) - svgGap + 2*svgPad
 
 	var b strings.Builder
-	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%.0f" height="%.0f" viewBox="0 0 %.0f %.0f" role="img" aria-label="claude-statusline rendered in three states">`+"\n", w, h, w, h)
+	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%.0f" height="%.0f" viewBox="0 0 %.0f %.0f" role="img" aria-label="claude-statusline rendered in %d states">`+"\n", w, h, w, h, len(lines))
 	fmt.Fprintf(&b, `<rect width="%.0f" height="%.0f" rx="8" fill="%s"/>`+"\n", w, h, hex(page))
 	fmt.Fprintf(&b, `<g font-family="'Symbols Nerd Font Mono','JetBrainsMono Nerd Font',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="%.0f">`+"\n", svgFontSize)
 

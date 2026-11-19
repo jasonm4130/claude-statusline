@@ -32,8 +32,8 @@ import (
 // the old window's samples are kept beside the new ones, shifted so that its
 // last reading is 0 (earlier readings go negative). The slope across the reset
 // is then the real usage, and the trailing rate works from the first minute of
-// a window instead of waiting a day. Only history whose last sample falls
-// inside the trail is carried.
+// a window instead of waiting a day. History is carried only when the old
+// window has ended and its last sample falls inside the trail.
 //
 // Until the history spans enough time (10 min for 5h, 24h for 7d) the old
 // cumulative projection is used, and both paths render the same way: a cap
@@ -125,7 +125,7 @@ func trackPace(fiveHour, sevenDay *window, now time.Time) paceHist {
 		trail, _ := paceTrail(label)
 		cutoff := now.Add(-trail)
 		if pw == nil || pw.Reset != w.ResetsAt {
-			pw = &paceWindow{Reset: w.ResetsAt, Prev: carryOver(pw, cutoff)}
+			pw = &paceWindow{Reset: w.ResetsAt, Prev: carryOver(pw, now, cutoff)}
 			st[label] = pw
 			dirty = true
 		}
@@ -177,9 +177,11 @@ func trackPaceFor(p *payload, now time.Time) paceHist {
 }
 
 // carryOver returns the history of a window that has just reset, re-based so
-// its last reading is 0, or nil when that reading is older than cutoff.
-func carryOver(old *paceWindow, cutoff time.Time) []sample {
-	if old == nil || len(old.Samples) == 0 {
+// its last reading is 0. It returns nil when that reading is older than
+// cutoff, or when the old window has not ended: a resets_at that moves without
+// a rollover has not zeroed the usage, and re-basing would count it twice.
+func carryOver(old *paceWindow, now, cutoff time.Time) []sample {
+	if old == nil || len(old.Samples) == 0 || now.Unix() < old.Reset {
 		return nil
 	}
 	last := old.Samples[len(old.Samples)-1]
