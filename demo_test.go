@@ -259,16 +259,17 @@ func renderSVG(lines []svgLine) string {
 				fmt.Fprintf(&b, `<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s"/>`+"\n",
 					x, y, rw, svgRowH, hex(r.bg))
 			}
-			if r.sep {
+			switch {
+			case r.sep:
 				// U+E0BC fills the upper-left half of the cell with the previous
 				// segment's background, leaving the diagonal edge.
 				fmt.Fprintf(&b, `<polygon points="%.1f,%.1f %.1f,%.1f %.1f,%.1f" fill="%s"/>`+"\n",
 					x, y, x+rw, y, x, y+svgRowH, hex(r.fg))
-			} else if r.thin {
+			case r.thin:
 				// U+E0BD is the same diagonal as a line only.
 				fmt.Fprintf(&b, `<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="1.5"/>`+"\n",
 					x+rw, y, x, y+svgRowH, hex(r.fg))
-			} else if strings.TrimSpace(r.text) != "" {
+			case strings.TrimSpace(r.text) != "":
 				weight := ""
 				if r.bold {
 					weight = ` font-weight="600"`
