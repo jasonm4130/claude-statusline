@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -29,8 +28,16 @@ import (
 // trails 24 hours, a full diurnal cycle, so sleeping does not bias the rate
 // downward at night or upward in the morning.
 //
+// A reset does not throw the history away. The new window starts at 0%, so
+// the old window's samples are kept beside the new ones, shifted so that its
+// last reading is 0 (earlier readings go negative). The slope across the reset
+// is then the real usage, and the trailing rate works from the first minute of
+// a window instead of waiting a day. Only history whose last sample falls
+// inside the trail is carried.
+//
 // Until the history spans enough time (10 min for 5h, 24h for 7d) the old
-// cumulative projection is used.
+// cumulative projection is used, and both paths render the same way: a cap
+// time when the cap lands before the reset, else the percent at reset.
 //
 // Frozen renders. The statusline can sit unrefreshed for minutes, so everything
 // shown is an absolute fact computed once: a clock time for the cap, or a
@@ -56,6 +63,9 @@ type sample struct {
 type paceWindow struct {
 	Reset   int64    `json:"reset"`
 	Samples []sample `json:"samples"`
+	// Prev is the previous window's history, re-based to end at 0. Kept apart
+	// from Samples so an older binary reading the file sees only real readings.
+	Prev []sample `json:"prev,omitempty"`
 }
 
 type paceState map[string]*paceWindow
@@ -112,8 +122,10 @@ func trackPace(fiveHour, sevenDay *window, now time.Time) paceHist {
 		if pw != nil && w.ResetsAt < pw.Reset {
 			continue
 		}
+		trail, _ := paceTrail(label)
+		cutoff := now.Add(-trail)
 		if pw == nil || pw.Reset != w.ResetsAt {
-			pw = &paceWindow{Reset: w.ResetsAt}
+			pw = &paceWindow{Reset: w.ResetsAt, Prev: carryOver(pw, cutoff)}
 			st[label] = pw
 			dirty = true
 		}
@@ -123,16 +135,31 @@ func trackPace(fiveHour, sevenDay *window, now time.Time) paceHist {
 			pw.Samples = append(pw.Samples, sample{now.Unix(), w.UsedPercentage})
 			dirty = true
 		}
-		trail, _ := paceTrail(label)
-		if pruned := pruneSamples(pw.Samples, now.Add(-trail)); len(pruned) != len(pw.Samples) {
+		if pruned := pruneSamples(pw.Samples, cutoff); len(pruned) != len(pw.Samples) {
 			pw.Samples = pruned
 			dirty = true
+		}
+		if len(pw.Prev) > 0 {
+			// Once this window's own samples reach back past the trail, the
+			// carried history can no longer be the base.
+			prev := pruneSamples(pw.Prev, cutoff)
+			if len(pw.Samples) > 0 && pw.Samples[0].T <= cutoff.Unix() {
+				prev = nil
+			}
+			if len(prev) != len(pw.Prev) {
+				pw.Prev = prev
+				dirty = true
+			}
 		}
 		if len(pw.Samples) > paceMaxSamples {
 			pw.Samples = pw.Samples[len(pw.Samples)-paceMaxSamples:]
 			dirty = true
 		}
-		hist[label] = pw.Samples
+		if len(pw.Prev) > 0 {
+			hist[label] = append(append([]sample{}, pw.Prev...), pw.Samples...)
+		} else {
+			hist[label] = pw.Samples
+		}
 	}
 	// A window that vanishes from the payload keeps its entry; the reset-change
 	// rule clears it if it comes back.
@@ -147,6 +174,23 @@ func trackPaceFor(p *payload, now time.Time) paceHist {
 		return nil
 	}
 	return trackPace(p.RateLimits.FiveHour, p.RateLimits.SevenDay, now)
+}
+
+// carryOver returns the history of a window that has just reset, re-based so
+// its last reading is 0, or nil when that reading is older than cutoff.
+func carryOver(old *paceWindow, cutoff time.Time) []sample {
+	if old == nil || len(old.Samples) == 0 {
+		return nil
+	}
+	last := old.Samples[len(old.Samples)-1]
+	if last.T < cutoff.Unix() {
+		return nil
+	}
+	out := make([]sample, 0, len(old.Prev)+len(old.Samples))
+	for _, x := range append(append([]sample{}, old.Prev...), old.Samples...) {
+		out = append(out, sample{x.T, x.U - last.U})
+	}
+	return pruneSamples(out, cutoff)
 }
 
 // pruneSamples drops samples older than cutoff but keeps the newest one before
@@ -219,9 +263,10 @@ func trailingRate(label string, hist []sample, used float64, now time.Time) (flo
 	return du / span.Seconds(), true
 }
 
-// trailingProjection returns the projected percent at reset and, when the cap
-// lands before the reset, the time it does.
-func trailingProjection(label string, w *window, hist []sample, now time.Time) (proj float64, capAt time.Time, hasCap, ok bool) {
+// paceProjection returns the projected percent at reset and, when the cap
+// lands before the reset, the time it does. The rate is the trailing one when
+// the history allows, else the cumulative one.
+func paceProjection(label string, w *window, length time.Duration, hist []sample, now time.Time) (proj float64, capAt time.Time, hasCap, ok bool) {
 	if w == nil || w.ResetsAt <= 0 || w.UsedPercentage >= 100 {
 		return 0, time.Time{}, false, false
 	}
@@ -236,7 +281,10 @@ func trailingProjection(label string, w *window, hist []sample, now time.Time) (
 	}
 	rate, ok := trailingRate(label, hist, used, now)
 	if !ok {
-		return 0, time.Time{}, false, false
+		used = w.UsedPercentage
+		if rate, ok = cumulativeRate(w, length, now); !ok {
+			return 0, time.Time{}, false, false
+		}
 	}
 	proj = math.Min(used+rate*left.Seconds(), 999)
 	if proj >= 100 && rate > 0 {
@@ -257,16 +305,4 @@ func capLabel(capAt, now time.Time) string {
 		return c.Format("15:04")
 	}
 	return c.Format("Mon 15:04")
-}
-
-// paceText returns the text after "<label> <used>%" for the trailing path.
-func paceText(label string, w *window, hist []sample, now time.Time) (text string, over, ok bool) {
-	proj, capAt, hasCap, ok := trailingProjection(label, w, hist, now)
-	if !ok {
-		return "", false, false
-	}
-	if hasCap {
-		return " cap " + capLabel(capAt, now), true, true
-	}
-	return fmt.Sprintf("→%d%%", int(math.Round(proj))), proj >= 100, true
 }

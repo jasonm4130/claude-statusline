@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="780" height="194" viewBox="0 0 780 194" role="img" aria-label="claude-statusline rendered in three states">
-<rect width="780" height="194" rx="8" fill="#141513"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="864" height="252" viewBox="0 0 864 252" role="img" aria-label="claude-statusline rendered in three states">
+<rect width="864" height="252" rx="8" fill="#141513"/>
 <g font-family="'Symbols Nerd Font Mono','JetBrainsMono Nerd Font',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14">
 <text x="16.0" y="29.0" font-size="11" fill="#75715e">on pace — both windows land well under the cap</text>
 <rect x="16.0" y="36.0" width="8.4" height="26.0" fill="#171815"/>
@@ -68,9 +68,9 @@
 <rect x="637.6" y="94.0" width="8.4" height="26.0" fill="#3a3520"/>
 <polygon points="637.6,94.0 646.0,94.0 637.6,120.0" fill="#2e2f29"/>
 <rect x="646.0" y="94.0" width="8.4" height="26.0" fill="#3a3520"/>
-<rect x="654.4" y="94.0" width="100.8" height="26.0" fill="#3a3520"/>
-<text x="654.4" y="112.0" fill="#e6db74" textLength="100.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▲ 󰔛 72→175% </text>
-<polygon points="755.2,94.0 763.6,94.0 755.2,120.0" fill="#3a3520"/>
+<rect x="654.4" y="94.0" width="151.2" height="26.0" fill="#3a3520"/>
+<text x="654.4" y="112.0" fill="#e6db74" textLength="151.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▲ 󰔛 72% cap 21:11 </text>
+<polygon points="805.6,94.0 814.0,94.0 805.6,120.0" fill="#3a3520"/>
 <text x="16.0" y="145.0" font-size="11" fill="#75715e">weekly window nearly spent — and still climbing</text>
 <rect x="16.0" y="152.0" width="8.4" height="26.0" fill="#171815"/>
 <rect x="24.4" y="152.0" width="168.0" height="26.0" fill="#171815"/>
@@ -97,13 +97,48 @@
 <text x="478.0" y="170.0" fill="#fd971f" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">󰅐 22:56 </text>
 <rect x="545.2" y="152.0" width="8.4" height="26.0" fill="#f92672"/>
 <polygon points="545.2,152.0 553.6,152.0 545.2,178.0" fill="#171815"/>
-<rect x="553.6" y="152.0" width="109.2" height="26.0" fill="#f92672"/>
-<text x="553.6" y="170.0" fill="#ffffff" font-weight="600" textLength="109.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ▲ 󰔟 91→114% </text>
-<rect x="662.8" y="152.0" width="8.4" height="26.0" fill="#171815"/>
-<polygon points="662.8,152.0 671.2,152.0 662.8,178.0" fill="#f92672"/>
-<rect x="671.2" y="152.0" width="8.4" height="26.0" fill="#171815"/>
-<rect x="679.6" y="152.0" width="75.6" height="26.0" fill="#171815"/>
-<text x="679.6" y="170.0" fill="#66d9ef" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">󰔛 13→32% </text>
-<polygon points="755.2,152.0 763.6,152.0 755.2,178.0" fill="#171815"/>
+<rect x="553.6" y="152.0" width="193.2" height="26.0" fill="#f92672"/>
+<text x="553.6" y="170.0" fill="#ffffff" font-weight="600" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> ▲ 󰔟 91% cap Sat 09:40 </text>
+<rect x="746.8" y="152.0" width="8.4" height="26.0" fill="#171815"/>
+<polygon points="746.8,152.0 755.2,152.0 746.8,178.0" fill="#f92672"/>
+<rect x="755.2" y="152.0" width="8.4" height="26.0" fill="#171815"/>
+<rect x="763.6" y="152.0" width="75.6" height="26.0" fill="#171815"/>
+<text x="763.6" y="170.0" fill="#66d9ef" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">󰔛 13→32% </text>
+<polygon points="839.2,152.0 847.6,152.0 839.2,178.0" fill="#171815"/>
+<text x="16.0" y="203.0" font-size="11" fill="#75715e">both windows amber — neighbours that share a background split on a thin line</text>
+<rect x="16.0" y="210.0" width="8.4" height="26.0" fill="#171815"/>
+<rect x="24.4" y="210.0" width="168.0" height="26.0" fill="#171815"/>
+<text x="24.4" y="228.0" fill="#c8c8c2" textLength="168.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> claude-statusline </text>
+<rect x="192.4" y="210.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<polygon points="192.4,210.0 200.8,210.0 192.4,236.0" fill="#171815"/>
+<rect x="200.8" y="210.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<rect x="209.2" y="210.0" width="67.2" height="26.0" fill="#2e2f29"/>
+<text x="209.2" y="228.0" fill="#f92672" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> main● </text>
+<rect x="276.4" y="210.0" width="8.4" height="26.0" fill="#171815"/>
+<polygon points="276.4,210.0 284.8,210.0 276.4,236.0" fill="#2e2f29"/>
+<rect x="284.8" y="210.0" width="8.4" height="26.0" fill="#171815"/>
+<rect x="293.2" y="210.0" width="100.8" height="26.0" fill="#171815"/>
+<text x="293.2" y="228.0" fill="#ae81ff" textLength="100.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">󰚩 opus·high </text>
+<rect x="394.0" y="210.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<polygon points="394.0,210.0 402.4,210.0 394.0,236.0" fill="#171815"/>
+<rect x="402.4" y="210.0" width="8.4" height="26.0" fill="#2e2f29"/>
+<rect x="410.8" y="210.0" width="50.4" height="26.0" fill="#2e2f29"/>
+<text x="410.8" y="228.0" fill="#a6e22e" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">󰍛 33% </text>
+<rect x="461.2" y="210.0" width="8.4" height="26.0" fill="#171815"/>
+<polygon points="461.2,210.0 469.6,210.0 461.2,236.0" fill="#2e2f29"/>
+<rect x="469.6" y="210.0" width="8.4" height="26.0" fill="#171815"/>
+<rect x="478.0" y="210.0" width="67.2" height="26.0" fill="#171815"/>
+<text x="478.0" y="228.0" fill="#fd971f" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">󰅐 22:56 </text>
+<rect x="545.2" y="210.0" width="8.4" height="26.0" fill="#3a3520"/>
+<polygon points="545.2,210.0 553.6,210.0 545.2,236.0" fill="#171815"/>
+<rect x="553.6" y="210.0" width="8.4" height="26.0" fill="#3a3520"/>
+<rect x="562.0" y="210.0" width="75.6" height="26.0" fill="#3a3520"/>
+<text x="562.0" y="228.0" fill="#e6db74" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">󰔟 65→81% </text>
+<rect x="637.6" y="210.0" width="8.4" height="26.0" fill="#3a3520"/>
+<line x1="646.0" y1="210.0" x2="637.6" y2="236.0" stroke="#7f7742" stroke-width="1.5"/>
+<rect x="646.0" y="210.0" width="8.4" height="26.0" fill="#3a3520"/>
+<rect x="654.4" y="210.0" width="151.2" height="26.0" fill="#3a3520"/>
+<text x="654.4" y="228.0" fill="#e6db74" textLength="151.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▲ 󰔛 72% cap 21:11 </text>
+<polygon points="805.6,210.0 814.0,210.0 805.6,236.0" fill="#3a3520"/>
 </g>
 </svg>

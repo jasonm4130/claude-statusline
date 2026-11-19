@@ -112,15 +112,79 @@ func TestPaceAbsentFiveHour(t *testing.T) {
 	}
 }
 
-func TestPaceResetClearsHistory(t *testing.T) {
+func TestPaceResetCarriesHistory(t *testing.T) {
 	paceEnv(t)
 	step(t, 0, w5(10), nil)
 	step(t, 30*time.Minute, w5(30), nil)
 	nw := &window{5, paceT0.Add(10 * time.Hour).Unix()}
 	step(t, 60*time.Minute, nw, nil)
-	h := trackPace(nw, nil, paceT0.Add(61*time.Minute))
-	if n := len(h["5h"]); n != 1 {
-		t.Errorf("want 1 sample after reset, got %d", n)
+	h := trackPace(nw, nil, paceT0.Add(61*time.Minute))["5h"]
+	// the old window re-based to end at 0, then the new window's own reading
+	want := []float64{-20, 0, 5}
+	if len(h) != len(want) {
+		t.Fatalf("got %+v", h)
+	}
+	for i, u := range want {
+		if h[i].U != u {
+			t.Errorf("sample %d = %v, want %v", i, h[i].U, u)
+		}
+	}
+}
+
+func TestPaceResetAfterIdleStartsFresh(t *testing.T) {
+	paceEnv(t)
+	step(t, 0, w5(10), nil)
+	step(t, 30*time.Minute, w5(30), nil)
+	// the old window's last reading is 90 minutes old, past the 40 minute trail
+	nw := &window{5, paceT0.Add(10 * time.Hour).Unix()}
+	step(t, 120*time.Minute, nw, nil)
+	if h := trackPace(nw, nil, paceT0.Add(121*time.Minute))["5h"]; len(h) != 1 {
+		t.Errorf("want 1 sample after an idle reset, got %+v", h)
+	}
+}
+
+func TestPaceWeeklyFirstDayWithoutHistory(t *testing.T) {
+	// The case that read 16→195%: a weekly window 14 hours old, with history
+	// only from this morning. Until a day has passed it shows the bare percent.
+	paceEnv(t)
+	reset := paceT0.Add(7*24*time.Hour - 14*time.Hour).Unix()
+	mk := func(u float64) *window { return &window{u, reset} }
+	step(t, 0, nil, mk(0))
+	if got := step(t, 9*time.Hour, nil, mk(16)); got != icon7d+"16%" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestPaceWeeklyResetKeepsTheRate(t *testing.T) {
+	// Two days at 10 points a day, then the window resets. Three hours into
+	// the new week the trailing rate already has a day of data behind it.
+	paceEnv(t)
+	old := &window{0, paceT0.Add(48 * time.Hour).Unix()}
+	for h := 0; h < 48; h++ {
+		old.UsedPercentage = 50 + float64(h)*10/24
+		step(t, time.Duration(h)*time.Hour, nil, old)
+	}
+	nw := func(u float64) *window { return &window{u, paceT0.Add(48*time.Hour + 7*24*time.Hour).Unix()} }
+	step(t, 48*time.Hour, nil, nw(0))
+	got := step(t, 51*time.Hour, nil, nw(1))
+	// ~10 points a day for 7 days: about 70%, so no cap and no warning
+	if !strings.HasPrefix(got, icon7d+"1→") || strings.Contains(got, overPace) {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestPaceWeeklyAfterWeekendGap(t *testing.T) {
+	// Last reading Friday evening, next one Monday morning: the Friday base
+	// is too old to trust, so the line falls back to the cumulative rate.
+	paceEnv(t)
+	reset := paceT0.Add(4 * 24 * time.Hour).Unix()
+	mk := func(u float64) *window { return &window{u, reset} }
+	step(t, 0, nil, mk(30))
+	step(t, 10*time.Hour, nil, mk(40))
+	got := step(t, 70*time.Hour, nil, mk(41))
+	// the window opened 72h before t0, so it is 142h old: 41/(142/168) = 49%
+	if got != icon7d+"41→49%" {
+		t.Errorf("got %q", got)
 	}
 }
 
@@ -154,8 +218,9 @@ func TestPaceFallbackBeforeEnoughHistory(t *testing.T) {
 	paceEnv(t)
 	step(t, 60*time.Minute, w5(20), nil)
 	got := step(t, 65*time.Minute, w5(25), nil) // 5 min of history < 10
-	// cumulative: elapsed 65/300, 25/0.2167 = 115% -> arrow form with glyph
-	if got != "▲ "+icon5h+"25→115%" {
+	// cumulative: 25 points in 65 minutes, 75 left -> cap 195 minutes later,
+	// before the reset at 300: the same cap form as the trailing path
+	if got != "▲ "+icon5h+"25% cap "+paceT0.Add(260*time.Minute).Format("15:04") {
 		t.Errorf("got %q", got)
 	}
 }

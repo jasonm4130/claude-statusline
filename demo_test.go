@@ -86,6 +86,7 @@ func demoRows(t *testing.T, now time.Time) []demoRow {
 		{"on pace — both windows land well under the cap", build(demoPayload(13, 23))},
 		{"five-hour burn projects past the cap; the weekly window is untouched", build(demoPayload(72, 23))},
 		{"weekly window nearly spent — and still climbing", build(demoPayload(13, 91))},
+		{"both windows amber — neighbours that share a background split on a thin line", build(demoPayload(72, 65))},
 	}
 }
 
@@ -128,6 +129,7 @@ type run struct {
 	hasBG bool
 	bold  bool
 	sep   bool // the powerline diagonal, drawn as geometry rather than a glyph
+	thin  bool // the thin diagonal between segments sharing a background
 }
 
 type svgLine struct {
@@ -160,10 +162,10 @@ func parseANSI(s string) []run {
 			continue
 		}
 		r, size := decodeRune(s[i:])
-		if string(r) == sep {
+		if g := string(r); g == sep || g == sepThin {
 			flush()
 			d := cur
-			d.sep, d.text = true, sep
+			d.sep, d.thin, d.text = g == sep, g == sepThin, g
 			runs = append(runs, d)
 		} else {
 			cur.text += string(r)
@@ -262,6 +264,10 @@ func renderSVG(lines []svgLine) string {
 				// segment's background, leaving the diagonal edge.
 				fmt.Fprintf(&b, `<polygon points="%.1f,%.1f %.1f,%.1f %.1f,%.1f" fill="%s"/>`+"\n",
 					x, y, x+rw, y, x, y+svgRowH, hex(r.fg))
+			} else if r.thin {
+				// U+E0BD is the same diagonal as a line only.
+				fmt.Fprintf(&b, `<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="1.5"/>`+"\n",
+					x+rw, y, x, y+svgRowH, hex(r.fg))
 			} else if strings.TrimSpace(r.text) != "" {
 				weight := ""
 				if r.bold {
