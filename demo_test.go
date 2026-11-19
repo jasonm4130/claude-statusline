@@ -86,6 +86,7 @@ func demoRows(t *testing.T, now time.Time) []demoRow {
 		{"on pace — both windows land well under the cap", build(demoPayload(13, 23))},
 		{"five-hour burn projects past the cap; the weekly window is untouched", build(demoPayload(72, 23))},
 		{"weekly window nearly spent — and still climbing", build(demoPayload(13, 91))},
+		{"both windows amber — neighbours that share a background split on a thin line", build(demoPayload(72, 65))},
 	}
 }
 
@@ -128,6 +129,7 @@ type run struct {
 	hasBG bool
 	bold  bool
 	sep   bool // the powerline diagonal, drawn as geometry rather than a glyph
+	thin  bool // the thin diagonal between segments sharing a background
 }
 
 type svgLine struct {
@@ -160,10 +162,10 @@ func parseANSI(s string) []run {
 			continue
 		}
 		r, size := decodeRune(s[i:])
-		if string(r) == sep {
+		if g := string(r); g == sep || g == sepThin {
 			flush()
 			d := cur
-			d.sep, d.text = true, sep
+			d.sep, d.thin, d.text = g == sep, g == sepThin, g
 			runs = append(runs, d)
 		} else {
 			cur.text += string(r)
@@ -241,7 +243,7 @@ func renderSVG(lines []svgLine) string {
 	h := float64(len(lines))*(svgCapH+svgRowH+svgGap) - svgGap + 2*svgPad
 
 	var b strings.Builder
-	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%.0f" height="%.0f" viewBox="0 0 %.0f %.0f" role="img" aria-label="claude-statusline rendered in three states">`+"\n", w, h, w, h)
+	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%.0f" height="%.0f" viewBox="0 0 %.0f %.0f" role="img" aria-label="claude-statusline rendered in %d states">`+"\n", w, h, w, h, len(lines))
 	fmt.Fprintf(&b, `<rect width="%.0f" height="%.0f" rx="8" fill="%s"/>`+"\n", w, h, hex(page))
 	fmt.Fprintf(&b, `<g font-family="'Symbols Nerd Font Mono','JetBrainsMono Nerd Font',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="%.0f">`+"\n", svgFontSize)
 
@@ -257,12 +259,17 @@ func renderSVG(lines []svgLine) string {
 				fmt.Fprintf(&b, `<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s"/>`+"\n",
 					x, y, rw, svgRowH, hex(r.bg))
 			}
-			if r.sep {
+			switch {
+			case r.sep:
 				// U+E0BC fills the upper-left half of the cell with the previous
 				// segment's background, leaving the diagonal edge.
 				fmt.Fprintf(&b, `<polygon points="%.1f,%.1f %.1f,%.1f %.1f,%.1f" fill="%s"/>`+"\n",
 					x, y, x+rw, y, x, y+svgRowH, hex(r.fg))
-			} else if strings.TrimSpace(r.text) != "" {
+			case r.thin:
+				// U+E0BD is the same diagonal as a line only.
+				fmt.Fprintf(&b, `<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="1.5"/>`+"\n",
+					x+rw, y, x, y+svgRowH, hex(r.fg))
+			case strings.TrimSpace(r.text) != "":
 				weight := ""
 				if r.bold {
 					weight = ` font-weight="600"`

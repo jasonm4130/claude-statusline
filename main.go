@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -70,13 +71,19 @@ var (
 
 	bgWarm  = rgb{0x3A, 0x35, 0x20}
 	fgWarm  = rgb{0xE6, 0xDB, 0x74}
-	sepWarm = rgb{0x2A, 0x26, 0x18}
+	sepWarm = rgb{0x7F, 0x77, 0x42}
 	bgCrit  = rgb{0xF9, 0x26, 0x72}
 	fgCrit  = rgb{0xFF, 0xFF, 0xFF}
 	sepCrit = rgb{0xC7, 0x1F, 0x5B}
 )
 
-const sep = "\ue0bc"
+// sep is the filled diagonal between segments of different backgrounds.
+// Between two segments that share one, a filled wedge in a darker shade reads
+// as a notch, so they get the thin diagonal instead, in a line colour.
+const (
+	sep     = "\ue0bc"
+	sepThin = "\ue0bd"
+)
 
 type state int
 
@@ -633,18 +640,45 @@ const (
 	// Under this much of a window elapsed, used/elapsed is dominated by
 	// whatever landed in the first few minutes and projects noise.
 	paceFloor = 0.05
+	// The weekly window needs a full day: before that, used/elapsed spreads
+	// working hours over a clock that also counts the night, and reads high.
+	paceFloorWeek = 1.0 / 7
 )
 
-func projected(w *window, length time.Duration, now time.Time) (float64, bool) {
+// elapsedFraction is how far into the window now is, or false when that is
+// under the floor and too early to project from.
+func elapsedFraction(w *window, length time.Duration, now time.Time) (time.Duration, float64, bool) {
 	if w == nil || w.ResetsAt <= 0 {
-		return 0, false
+		return 0, 0, false
+	}
+	floor := paceFloor
+	if length == sevenDayLen {
+		floor = paceFloorWeek
 	}
 	elapsed := length - time.Unix(w.ResetsAt, 0).Sub(now)
 	e := float64(elapsed) / float64(length)
-	if e < paceFloor || e > 1 {
+	if e < floor || e > 1 {
+		return 0, 0, false
+	}
+	return elapsed, e, true
+}
+
+func projected(w *window, length time.Duration, now time.Time) (float64, bool) {
+	_, e, ok := elapsedFraction(w, length, now)
+	if !ok {
 		return 0, false
 	}
 	return math.Min(w.UsedPercentage/e, 999), true
+}
+
+// cumulativeRate is the average burn since the window opened, in percent per
+// second.
+func cumulativeRate(w *window, length time.Duration, now time.Time) (float64, bool) {
+	elapsed, _, ok := elapsedFraction(w, length, now)
+	if !ok {
+		return 0, false
+	}
+	return w.UsedPercentage / elapsed.Seconds(), true
 }
 
 // Each window renders as its own segment so it can carry its own colour: a hot
@@ -660,10 +694,10 @@ func limitSegmentsWith(p *payload, now time.Time, hist paceHist) []segment {
 		return nil
 	}
 	var segs []segment
-	if s, ok := limitWindow("7d", rl.SevenDay, sevenDayLen, "", now, hist["7d"]); ok {
+	if s, ok := limitWindow("7d", rl.SevenDay, sevenDayLen, now, hist["7d"]); ok {
 		segs = append(segs, s)
 	}
-	if s, ok := limitWindow("5h", rl.FiveHour, fiveHourLen, "", now, hist["5h"]); ok {
+	if s, ok := limitWindow("5h", rl.FiveHour, fiveHourLen, now, hist["5h"]); ok {
 		segs = append(segs, s)
 	}
 	return segs
@@ -675,39 +709,28 @@ func limitSegmentsWith(p *payload, now time.Time, hist paceHist) []segment {
 // terminal with a mangled palette.
 const overPace = "\u25b2 "
 
-func limitWindow(label string, w *window, length time.Duration, suffix string, now time.Time, hist []sample) (segment, bool) {
+// limitWindow renders one window in one of three forms, whichever rate fed it:
+// "▲ 62% cap 15:40" when the cap lands before the reset, "13→32%" when it does
+// not, and "13%" when there is nothing to project from.
+func limitWindow(label string, w *window, length time.Duration, now time.Time, hist []sample) (segment, bool) {
 	if w == nil {
 		return segment{}, false
 	}
 	st := stateOf(w.UsedPercentage)
-	text := fmt.Sprintf("%s%d", limitIcon(label), int(math.Round(w.UsedPercentage)))
-	if pt, over, ok := paceText(label, w, hist, now); ok {
-		if strings.HasPrefix(pt, " cap") {
-			text += "%"
+	used := limitIcon(label) + strconv.Itoa(int(math.Round(w.UsedPercentage)))
+	text := used + "%"
+	if proj, capAt, hasCap, ok := paceProjection(label, w, length, hist, now); ok {
+		if hasCap {
+			text += " cap " + capLabel(capAt, now)
+		} else {
+			text = fmt.Sprintf("%s\u2192%d%%", used, int(math.Round(proj)))
 		}
-		text += pt
-		if over {
+		if hasCap || proj >= 100 {
 			text = overPace + text
 			if st < stateWarming {
 				st = stateWarming
 			}
 		}
-		if strings.Contains(pt, "cap") {
-			suffix = "" // the cap day is the news; the reset day would muddy it
-		}
-	} else if proj, ok := projected(w, length, now); !ok {
-		text += "%"
-	} else {
-		text += fmt.Sprintf("\u2192%d%%", int(math.Round(proj)))
-		if proj >= 100 {
-			text = overPace + text
-			if st < stateWarming {
-				st = stateWarming
-			}
-		}
-	}
-	if suffix != "" {
-		text += " " + suffix
 	}
 	return segment{text, idLimit, stateFG(st, idLimit), st}, true
 }
@@ -771,16 +794,16 @@ func draw(segs []segment) string {
 			b.WriteString(" " + fg(s.fg) + s.text + " ")
 		}
 		if i+1 < len(segs) {
-			chev := bgs[i]
+			chev, glyph := bgs[i], sep
 			if chev == bgs[i+1] {
 				switch s.state {
 				case stateCritical:
-					chev = sepCrit
+					chev, glyph = sepCrit, sepThin
 				case stateWarming:
-					chev = sepWarm
+					chev, glyph = sepWarm, sepThin
 				}
 			}
-			b.WriteString(bg(bgs[i+1]) + fg(chev) + sep)
+			b.WriteString(bg(bgs[i+1]) + fg(chev) + glyph)
 		} else {
 			b.WriteString("\x1b[0m" + fg(bgs[i]) + sep + "\x1b[0m")
 		}
