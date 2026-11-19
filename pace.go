@@ -25,8 +25,10 @@ import (
 // resolution of 1.5 %/h, which projects to about +-7.5 points over the 5h
 // window: tight enough to be useful, while short enough that a burst dominates
 // it within ~15 minutes. 30 minutes doubles that noise; 60 reacts slowly. 7d
-// trails 24 hours, a full diurnal cycle, so sleeping does not bias the rate
-// downward at night or upward in the morning.
+// trails 7 days, a full weekly cycle. A 24 hour trail removed the night but
+// not the weekend: a workday's rate stretched over all seven days warned on
+// most weekdays and went quiet on Saturday. The 7 day trail reacts slowly to
+// a heavy day, which the 5h window is there to catch.
 //
 // A reset does not throw the history away. The new window starts at 0%, so
 // the old window's samples are kept beside the new ones, shifted so that its
@@ -46,13 +48,17 @@ import (
 // the truth. A frozen reading therefore overstates the burn and errs safe.
 const (
 	fiveHourTrail = 40 * time.Minute
-	sevenDayTrail = 24 * time.Hour
+	sevenDayTrail = 7 * 24 * time.Hour
 	fiveHourSpan  = 10 * time.Minute
 	sevenDaySpan  = 24 * time.Hour
 
-	paceHeartbeat  = 5 * time.Minute // rewrite an unchanged value this often
-	paceMaxSamples = 400
-	paceStateFile  = "pace.json"
+	// Rewrite an unchanged value this often. The weekly beat is slower so a
+	// week of history fits under paceMaxSamples: at most 168 beats plus one
+	// sample per percent.
+	paceHeartbeat     = 5 * time.Minute
+	paceHeartbeatWeek = time.Hour
+	paceMaxSamples    = 400
+	paceStateFile     = "pace.json"
 )
 
 type sample struct {
@@ -131,7 +137,11 @@ func trackPace(fiveHour, sevenDay *window, now time.Time) paceHist {
 		}
 		n := len(pw.Samples)
 		stale := n > 0 && w.UsedPercentage < pw.Samples[n-1].U // keep history, record nothing
-		if !stale && (n == 0 || pw.Samples[n-1].U != w.UsedPercentage || now.Sub(time.Unix(pw.Samples[n-1].T, 0)) > paceHeartbeat) {
+		beat := paceHeartbeat
+		if label == "7d" {
+			beat = paceHeartbeatWeek
+		}
+		if !stale && (n == 0 || pw.Samples[n-1].U != w.UsedPercentage || now.Sub(time.Unix(pw.Samples[n-1].T, 0)) > beat) {
 			pw.Samples = append(pw.Samples, sample{now.Unix(), w.UsedPercentage})
 			dirty = true
 		}
@@ -196,7 +206,7 @@ func carryOver(old *paceWindow, now, cutoff time.Time) []sample {
 }
 
 // pruneSamples drops samples older than cutoff but keeps the newest one before
-// it as an anchor, so a night of idleness does not erase the 24h baseline.
+// it as an anchor, so an idle stretch does not erase the baseline.
 func pruneSamples(s []sample, cutoff time.Time) []sample {
 	c := cutoff.Unix()
 	keep := 0

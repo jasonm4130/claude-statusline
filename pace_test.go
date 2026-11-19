@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -172,7 +173,7 @@ func TestPaceWeeklyFirstDayWithoutHistory(t *testing.T) {
 
 func TestPaceWeeklyResetKeepsTheRate(t *testing.T) {
 	// Two days at 10 points a day, then the window resets. Three hours into
-	// the new week the trailing rate already has a day of data behind it.
+	// the new week the trailing rate already has two days of data behind it.
 	paceEnv(t)
 	old := &window{0, paceT0.Add(48 * time.Hour).Unix()}
 	for h := 0; h <= 47; h++ {
@@ -189,16 +190,16 @@ func TestPaceWeeklyResetKeepsTheRate(t *testing.T) {
 }
 
 func TestPaceWeeklyAfterWeekendGap(t *testing.T) {
-	// Last reading Friday evening, next one Monday morning: the Friday base
-	// is too old to trust, so the line falls back to the cumulative rate.
+	// Last reading Friday evening, next one Monday morning: the 7 day trail
+	// keeps the whole stretch, so the quiet weekend counts toward the rate.
 	paceEnv(t)
 	reset := paceT0.Add(4 * 24 * time.Hour).Unix()
 	mk := func(u float64) *window { return &window{u, reset} }
 	step(t, 0, nil, mk(30))
 	step(t, 10*time.Hour, nil, mk(40))
 	got := step(t, 70*time.Hour, nil, mk(41))
-	// the window opened 72h before t0, so it is 142h old: 41/(142/168) = 49%
-	if got != icon7d+"41→49%" {
+	// 11 points over 70 hours, 26 hours to the reset: 41 + 4 = 45%
+	if got != icon7d+"41→45%" {
 		t.Errorf("got %q", got)
 	}
 }
@@ -305,6 +306,25 @@ func TestPaceUnwritableStateFallsBack(t *testing.T) {
 	got := step(t, 60*time.Minute, w5(15), nil)
 	if !strings.HasPrefix(got, icon5h+"15→75%") {
 		t.Errorf("got %q", got)
+	}
+}
+
+func TestPaceWeekOfHistoryFits(t *testing.T) {
+	// A week of renders every 15 minutes, used climbing to 90%: the base a
+	// week back must survive the sample cap.
+	paceEnv(t)
+	reset := paceT0.Add(8 * 24 * time.Hour).Unix()
+	var h paceHist
+	for m := 0; m <= 7*24*60; m += 15 {
+		w := &window{math.Floor(float64(m) * 90 / (7 * 24 * 60)), reset}
+		h = trackPace(nil, w, paceT0.Add(time.Duration(m)*time.Minute))
+	}
+	s := h["7d"]
+	if len(s) > paceMaxSamples {
+		t.Fatalf("%d samples", len(s))
+	}
+	if first := time.Unix(s[0].T, 0); paceT0.Add(7*24*time.Hour).Sub(first) < 7*24*time.Hour {
+		t.Errorf("oldest sample %v is inside the trail; the base was cut", first)
 	}
 }
 
